@@ -3,6 +3,7 @@ deploy_strategy = "campsites"
 
 [environments.test]
 variable = "test"
+namespace = "test-namespace"
 config_path = "../../devops/test.yaml"
 
 [environments.lab]
