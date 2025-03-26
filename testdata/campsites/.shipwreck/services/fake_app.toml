@@ -1,0 +1,14 @@
+name = "fake_app"
+deploy_strategy = "campsites"
+
+[environments.test]
+variable = "test"
+config_path = "../../devops/test.yaml"
+
+[environments.lab]
+variable = "lab"
+config_path = "../../devops/lab.yaml"
+
+[environments.prod]
+variable = "prod"
+config_path = ""
