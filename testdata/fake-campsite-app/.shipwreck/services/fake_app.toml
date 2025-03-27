@@ -1,5 +1,6 @@
-name = "fake_app"
+name = "fake_campsites_app"
 deploy_strategy = "campsites"
+git_repo_path = "."
 
 [environments.test]
 variable = "test"

@@ -1,0 +1,10 @@
+name = "my-proj"
+deploy_strategy = "my-strat"
+git_repo_path = "."
+
+[strategy_config]
+# Add your strategy-specific config here
+
+[environments.test]
+namespace = "test"
+config_path = "devops/test.yaml"
