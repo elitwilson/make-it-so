@@ -1,9 +1,59 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 
 use super::campsites::VersionTarget;
+
+pub fn apply_version_targets_with_yq(
+    path: &Path,
+    service_name: &str,
+    targets: &[VersionTarget],
+    new_version: &str,
+    dry_run: bool,
+) -> Result<()> {
+    for target in targets {
+        let key = &target.key_path;
+
+        let yq_expr = if let Some(match_name) = &target.match_name {
+            format!(
+                r#"( .releases[0].values[] | select(has("{}")) | .{}[] | select(.name == "{}") | .value ) = "{}""#,
+                key, key, match_name, new_version
+            )
+        } else {
+            format!(
+                r#"( .releases[0].values[] | select(has("{}")) | .{} ) = "{}""#,
+                key, key, new_version
+            )
+        };
+
+        println!("🔧 Running yq patch:\n    {}", yq_expr);
+
+        if dry_run {
+            println!(
+                "💡 [dry run] Would run: yq eval '{}' -i {}",
+                yq_expr,
+                path.display()
+            );
+        } else {
+            let output = Command::new("yq")
+                .args(["eval", &yq_expr, "-i", path.to_str().unwrap()])
+                .output()
+                .context("Failed to execute yq")?;
+
+            if !output.status.success() {
+                return Err(anyhow!(
+                    "yq failed: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+        }
+    }
+
+    println!("✅ YAML updated via yq");
+    Ok(())
+}
 
 pub fn apply_version_targets(
     path: &Path,
@@ -12,15 +62,24 @@ pub fn apply_version_targets(
     dry_run: bool,
 ) -> Result<Value> {
     if dry_run {
-        println!("🌵 [dry run] Would read and patch YAML file: {}", path.display());
+        println!(
+            "🌵 [dry run] Would read and patch YAML file: {}",
+            path.display()
+        );
         return Ok(Value::Null);
     }
 
     let contents = fs::read_to_string(path)
         .with_context(|| format!("Failed to read YAML file: {}", path.display()))?;
 
-    let mut doc: Value = serde_yaml::from_str(&contents)
-        .with_context(|| format!("Failed to parse YAML: {}", path.display()))?;
+    // First, try serde_yaml normally
+    let mut doc: Value = match serde_yaml::from_str(&contents) {
+        Ok(value) => value,
+        Err(err) => {
+            println!("⚠️ Standard YAML parse failed. Trying yq fallback...");
+            return load_yaml_with_yq(path);
+        }
+    };
 
     if doc.is_null() {
         println!("⚠️ YAML file is empty or invalid. Skipping mutation.");
@@ -32,6 +91,7 @@ pub fn apply_version_targets(
     }
 
     let new_yaml = serde_yaml::to_string(&doc)?;
+
     fs::write(path, new_yaml)
         .with_context(|| format!("Failed to write updated YAML: {}", path.display()))?;
     println!("✅ Updated version(s) in {}", path.display());
@@ -39,14 +99,40 @@ pub fn apply_version_targets(
     Ok(doc)
 }
 
+pub fn load_yaml_with_yq(path: &Path) -> Result<serde_yaml::Value> {
+    println!("📣 Attempting to run `yq` fallback...");
+
+    let output = Command::new("yq")
+        .args(["eval", "explode(.)", path.to_str().unwrap()])
+        .output()
+        .context("Failed to run yq")?;
+
+    if !output.status.success() {
+        return Err(anyhow!(
+            "❌ `yq` fallback failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    let yaml_str = String::from_utf8_lossy(&output.stdout);
+    let doc: Value =
+        serde_yaml::from_str(&yaml_str).context("❌ Failed to parse YAML from yq output")?;
+
+    println!("✅ Successfully loaded YAML via yq fallback (read-only)");
+    Ok(doc)
+}
+
 fn patch_single_target(doc: &mut Value, target: &VersionTarget, new_version: &str) -> Result<()> {
     let key = &target.key_path;
 
-    println!("🔍 Patching key: {}", target.key_path);
-    println!("🔍 match_name: {:?}", target.match_name);
-    println!("🔍 YAML before:\n{}", serde_yaml::to_string(doc)?);
+    // println!("🔍 Patching key: {}", target.key_path);
+    // println!("🔍 match_name: {:?}", target.match_name);
+    // println!("🔍 YAML before:\n{:#?}", serde_yaml::to_string(doc)?);
 
     if let Some(match_name) = &target.match_name {
+        let val = doc.get(key);
+        println!("📦 raw value at `{}`:\n{:#?}", key, val);
+
         // Handle array-of-maps matching, e.g., proxiedAppEnv -> [{ name: VERSION, value: ... }]
         if let Some(items) = doc.get_mut(key).and_then(Value::as_sequence_mut) {
             for item in items {
@@ -81,7 +167,8 @@ fn patch_single_target(doc: &mut Value, target: &VersionTarget, new_version: &st
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_yaml::Value;
+    use std::fs::{self};
+    use tempfile::tempdir;
 
     #[test]
     fn it_replaces_a_simple_top_level_value() {
@@ -143,5 +230,29 @@ proxiedAppEnv:
             other_entry.get("value").unwrap().as_str(),
             Some("untouched")
         );
+    }
+
+    #[test]
+    fn it_uses_yq_fallback_on_serde_failure() {
+        let dir = tempdir().unwrap();
+        let file_path = dir.path().join("anchors.yaml");
+
+        let bad_yaml = r#"
+    foo: &bar
+      nested: true
+    baz: *bar
+    "#;
+        fs::write(&file_path, bad_yaml).unwrap();
+
+        let result = apply_version_targets(&file_path, &[], "1.2.3", false);
+
+        match result {
+            Ok(doc) => {
+                println!("✅ Fallback succeeded. Parsed doc: {:#?}", doc);
+            }
+            Err(e) => {
+                panic!("❌ Fallback failed unexpectedly: {e}");
+            }
+        }
     }
 }

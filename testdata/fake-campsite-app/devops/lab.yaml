@@ -1,2 +1,69 @@
-name: "lab"
-tag: 0.0.1
+releases:
+  - name: tlfb-lab-api
+    namespace: tlfb-lab
+    chart: hits_devops/hits-site
+    version: v1.1.2
+    installed: true
+    values:
+      - gcpAppName: tlfb-lab
+      - supportEmail: hits-academic-spi@umich.edu
+      - appDomainName: &domain_name
+                         tlfbsa.lab.app.med.umich.edu
+      - enabledContainers:
+          - proxiedApp
+          - apache
+          - cloudSQLProxy
+      - apacheType: proxy
+      - hitsLocation: gcp
+      - replicaCount: 1
+      - ingress:
+          enabled: false
+          use_managed_cert: false
+          managed_cert_domains:
+            - *domain_name
+          tls:
+            - secretName: tls-secret
+      #- appStatusCheck: /
+      # The following two values disable all probes in kubernetes
+      - apacheProbesEnabled: false
+      - proxiedAppProbesEnabled: false
+      - iap:
+          enabled: false
+      - proxiedAppRepository: registry-prod.app.med.umich.edu/hits-ait-rpi/tlfb/tlfb-api/tlfb-api
+      - proxiedAppImageTag: 0.7.7lab
+      - proxiedAppPort: 8000
+      - proxiedAppEnv:
+          - name: VERSION
+            value: "0.7.7lab"
+          - name: ENV
+            value: "test"
+          - name: PORT
+            value: "8000"
+          - name: AUTH_URI
+            value: "https://tlfb-test-auth-service"
+          - name: DB_HOST
+            value: {{ requiredEnv "DB_HOST"}}
+          - name: DB_USER
+            value: {{ requiredEnv "DB_USER" }}
+          - name: DB_PASSWORD
+            value: {{ requiredEnv "DB_PASSWORD"}}
+          - name: DB_NAME
+            value: {{ requiredEnv "DB_NAME" }}
+          - name: DB_MIGRATION_MODE
+            value: {{ requiredEnv "DB_MIGRATION_MODE"}}
+          - name: DB_PORT
+            value: "5432"
+      - cloudSQLProxyInstances: 'hits-spi-tlfbsa-27c8:us-central1:tlfb-prod-psql-f0966196=tcp:5432'
+      - serviceAccount:
+          name: tlfb-lab-ksa
+          create: false
+
+# No need to change anything beyond this point unless directed by devops
+helmDefaults:
+  createNamespace: false
+repositories:
+  - name: hits_devops
+    # this url points to hits-site repository
+    url: https://git.umms.med.umich.edu/api/v4/projects/4852/packages/helm/stable
+    username: gitlab-ci-token
+    password: {{ requiredEnv "CI_JOB_TOKEN" }}

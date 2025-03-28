@@ -11,3 +11,7 @@ version_targets = [
 [environments.dev]
 namespace = "dev"
 config_path = "devops/dev.yaml"
+
+[environments.lab]
+namespace = "lab"
+config_path = "devops/lab.yaml"

@@ -1,6 +1,6 @@
 [package]
 name = "shipwreck"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2024"
 description = "A silly, hilarious extravagance in personal CI/CD tooling that is delightfully excessive but will ultimately yield some reduced pain and, frankly, enjoyment."
 
@@ -11,3 +11,6 @@ toml = "0.8"
 serde_yaml = "0.9"
 serde_json = "1.0"
 anyhow = "1.0"
+
+[dev-dependencies]
+tempfile = "3"
