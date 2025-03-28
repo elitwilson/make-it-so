@@ -9,8 +9,13 @@ pub fn apply_version_targets(
     path: &Path,
     targets: &[VersionTarget],
     new_version: &str,
-    // dry_run: bool,
+    dry_run: bool,
 ) -> Result<Value> {
+    if dry_run {
+        println!("🌵 [dry run] Would read and patch YAML file: {}", path.display());
+        return Ok(Value::Null);
+    }
+
     let contents = fs::read_to_string(path)
         .with_context(|| format!("Failed to read YAML file: {}", path.display()))?;
 

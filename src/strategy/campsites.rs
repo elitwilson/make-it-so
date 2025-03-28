@@ -1,3 +1,4 @@
+use crate::git_utils::{commit_changes, create_git_tag, push_changes, push_git_tag, stage_files};
 use crate::models::DeploymentContext;
 use crate::strategy::build::BuildStrategy;
 use crate::strategy::deploy::DeployStrategy;
@@ -27,11 +28,10 @@ impl CampsitesBuildStrategy {
 impl BuildStrategy for CampsitesBuildStrategy {
     fn build(&self, ctx: &DeploymentContext, raw_config: &toml::Value) -> Result<()> {
         println!("🚀 Building service with Campsites strategy");
-
         if ctx.dry_run {
-            println!("🌵 Dry run mode enabled. Skipping build.");
-            return Ok(());
-        }
+            println!("🌵 Dry run mode enabled — no changes will be written or pushed.");
+            println!("───────────────────────────────────────────────────────────────");
+        }        
 
         let strategy_config: CampsitesStrategyConfig =
             toml::from_str(&toml::to_string(raw_config)?)?;
@@ -48,7 +48,15 @@ impl BuildStrategy for CampsitesBuildStrategy {
             &ctx.resolved_config_path,
             &strategy_config.version_targets,
             ctx.version,
+            ctx.dry_run,
         )?;
+
+        stage_files(&[ctx.resolved_config_path.clone()], &ctx.git_repo_path, ctx.dry_run)?;
+        commit_changes(&ctx.git_repo_path, ctx.dry_run)?;
+        create_git_tag(&ctx.version, &ctx.git_repo_path, ctx.dry_run)?;
+        push_changes(&ctx.git_repo_path, ctx.dry_run)?;
+        push_git_tag(&ctx.version, &ctx.git_repo_path, ctx.dry_run)?;
+
 
         println!("Updated YAML: {:#?}", updated_yaml);
 

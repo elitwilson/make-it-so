@@ -1,4 +1,4 @@
-proxiedAppImageTag: 0.0.1
+proxiedAppImageTag: 0.0.3
 proxiedAppEnv:
 - name: VERSION
-  value: 0.0.1
+  value: 0.0.3

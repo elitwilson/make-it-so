@@ -1,5 +1,5 @@
 //! Shipwreck CLI
-//! Or: How I Learned to Stop Worrying and Build an Entire CI/CD Workflow in Rust Instead of Writing a Makefile
+//! Or: How I Learned to Stop Worrying and Wrap My Simple CI/CD Workflow In A Rust CLI Instead of a Makefile
 //! 
 //! A silly, hilarious extravagance in personal CI/CD tooling that is delightfully excessive yet likely to reduce some pain in the long run.
 //!
@@ -9,6 +9,7 @@ mod config;
 mod models;
 mod commands;
 mod strategy;
+mod git_utils;
 
 use clap::Parser;
 use cli::{Cli, Commands};
