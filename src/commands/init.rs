@@ -11,6 +11,7 @@ fn generate_service_toml(service: &str, strategy: &str) -> String {
         r#"
 name = "{service}"
 deploy_strategy = "{strategy}"
+git_repo_path = "."
 
 [strategy_config]
 # Add your strategy-specific config here
@@ -77,19 +78,19 @@ fn make_executable(plugin_path: &PathBuf) -> Result<()> {
 }
 
 // Very naive PascalCase conversion
-fn pascal_case(input: &str) -> String {
-    input
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .map(|s| {
-            let mut chars = s.chars();
-            match chars.next() {
-                Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect::<String>()
-}
+// fn pascal_case(input: &str) -> String {
+//     input
+//         .split(|c: char| !c.is_alphanumeric())
+//         .filter(|s| !s.is_empty())
+//         .map(|s| {
+//             let mut chars = s.chars();
+//             match chars.next() {
+//                 Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+//                 None => String::new(),
+//             }
+//         })
+//         .collect::<String>()
+// }
 
 pub fn run_init(service: String, strategy: String) -> Result<()> {
     let shipwreck_dir = PathBuf::from(".shipwreck");
@@ -98,7 +99,9 @@ pub fn run_init(service: String, strategy: String) -> Result<()> {
         println!("📁 Created .shipwreck/");
     }
 
-    let config_path = shipwreck_dir.join(format!("{}.toml", service));
+    // let config_path = shipwreck_dir.join(format!("{}.toml", service));
+    let config_path = shipwreck_dir.join("shipwreck.toml");
+
     if !config_path.exists() {
         let toml = generate_service_toml(&service, &strategy);
         fs::write(&config_path, toml)?;

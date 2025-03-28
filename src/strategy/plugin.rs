@@ -18,7 +18,7 @@ impl PluginBuildStrategy {
 }
 
 impl BuildStrategy for PluginBuildStrategy {
-    fn build(&self, ctx: &DeploymentContext) -> Result<()> {
+    fn build(&self, ctx: &DeploymentContext, _raw_config: &toml::Value) -> Result<()> {
         let json = serde_json::to_string(ctx)?;
         let mut child = Command::new(&self.path)
             .stdin(Stdio::piped())

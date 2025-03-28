@@ -6,7 +6,7 @@ use crate::strategy::plugin::PluginBuildStrategy;
 use anyhow::{Result, anyhow};
 
 pub trait BuildStrategy {
-    fn build(&self, ctx: &DeploymentContext) -> Result<()>;
+    fn build(&self, ctx: &DeploymentContext, raw_config: &toml::Value) -> Result<()>;
 }
 
 pub fn get_build_strategy(name: &str) -> Result<Box<dyn BuildStrategy>> {

@@ -60,14 +60,6 @@ impl<'a> DeploymentContext<'a> {
             .canonicalize()
             .with_context(|| format!("Failed to resolve path: {}", config_path))?;
 
-        // let resolved_config_path = PathBuf::from(".shipwreck")
-        //     .join(format!("{}.toml", service_file_name))
-        //     .parent()
-        //     .unwrap()
-        //     .join(config_path)
-        //     .canonicalize()
-        //     .with_context(|| format!("Failed to resolve path: {}", config_path))?;
-
         let repo_path = config
             .git_repo_path
             .as_ref()
