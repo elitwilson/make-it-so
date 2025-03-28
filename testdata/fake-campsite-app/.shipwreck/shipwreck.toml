@@ -1,0 +1,13 @@
+name = "fake-app"
+deploy_strategy = "campsites"
+git_repo_path = "."
+
+[strategy_config]
+version_targets = [
+  { key_path = "proxiedAppImageTag" },
+  { key_path = "proxiedAppEnv", match_name = "VERSION" }
+]
+
+[environments.dev]
+namespace = "dev"
+config_path = "devops/dev.yaml"
