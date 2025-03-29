@@ -9,7 +9,6 @@ version_targets = [
   { key_path = "proxiedAppEnv", match_name = "VERSION" }
 ]
 
-# Must be Deno dependencies with valid URLs
 [deno_dependencies]
 cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 

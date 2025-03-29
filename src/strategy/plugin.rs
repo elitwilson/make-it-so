@@ -28,6 +28,7 @@ impl BuildStrategy for PluginBuildStrategy {
         // Spawn the plugin with Deno
         let mut child = Command::new("deno")
             .arg("run")
+            // !!This needs to be scoped down later!!
             .arg("--allow-all") // you can scope this down later
             .arg(&self.path)
             .stdin(Stdio::piped())
@@ -50,31 +51,4 @@ impl BuildStrategy for PluginBuildStrategy {
 
         Ok(())
     }
-    // fn build(&self, ctx: &DeploymentContext, full_config: &toml::Value) -> Result<()> {
-    //     println!("full config: {:?}", full_config);
-
-    //     // 💾 Step 1: Cache Deno deps (if defined)
-    //     cache_deno_dependencies(full_config)?;
-
-    //     let json = serde_json::to_string(ctx)?;
-    //     let mut child = Command::new(&self.path)
-    //         .stdin(Stdio::piped())
-    //         .stdout(Stdio::inherit())
-    //         .stderr(Stdio::inherit())
-    //         .spawn()
-    //         .with_context(|| format!("Failed to run plugin: {}", self.path.display()))?;
-
-    //     child
-    //         .stdin
-    //         .as_mut()
-    //         .context("Failed to open stdin for plugin")?
-    //         .write_all(json.as_bytes())?;
-
-    //     let status = child.wait()?;
-    //     if !status.success() {
-    //         return Err(anyhow!("Plugin exited with non-zero status"));
-    //     }
-
-    //     Ok(())
-    // }
 }
