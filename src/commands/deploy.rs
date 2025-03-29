@@ -4,7 +4,7 @@ use crate::config::load_shipwreck_config;
 use anyhow::Result;
 
 pub fn run_deploy(service: String, env: String, version: String, dry_run: bool) -> Result<()> {
-    let (config, _config_path) = load_shipwreck_config()?;
+    let (config, _config_path, _raw_config) = load_shipwreck_config()?;
     
     let strategy_name = config
         .deploy_strategy
