@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use clap::{Parser, Subcommand};
 
 /// Your CLI entrypoint definition
@@ -56,4 +58,15 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
     }
+}
+
+pub fn prompt_user(message: &str) -> anyhow::Result<bool> {
+    print!("{} [y/N]: ", message);
+    io::stdout().flush()?; // Make sure the prompt shows before user types
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let input = input.trim().to_lowercase();
+
+    Ok(matches!(input.as_str(), "y" | "yes"))
 }

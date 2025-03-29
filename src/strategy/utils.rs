@@ -3,56 +3,37 @@ use serde_yaml::Value;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-
 use super::campsites::VersionTarget;
 
-pub fn apply_version_targets_with_yq(
-    path: &Path,
-    service_name: &str,
-    targets: &[VersionTarget],
-    new_version: &str,
-    dry_run: bool,
-) -> Result<()> {
-    for target in targets {
-        let key = &target.key_path;
+// pub fn patch_yaml_key_value(
+//     path: &Path,
+//     key: &str,
+//     new_value: &str,
+//     dry_run: bool,
+// ) -> Result<()> {
+//     println!("Path: {}", path.display());
 
-        let yq_expr = if let Some(match_name) = &target.match_name {
-            format!(
-                r#"( .releases[0].values[] | select(has("{}")) | .{}[] | select(.name == "{}") | .value ) = "{}""#,
-                key, key, match_name, new_version
-            )
-        } else {
-            format!(
-                r#"( .releases[0].values[] | select(has("{}")) | .{} ) = "{}""#,
-                key, key, new_version
-            )
-        };
+//     let file_contents = fs::read(path)
+//         .with_context(|| format!("Failed to read file: {}", path.display()))?;
+//     let doc = yaml::from_slice(&file_contents)?;
 
-        println!("🔧 Running yq patch:\n    {}", yq_expr);
+//     println!("File Contents: {:#?}", file_contents);
+//     println!("Doc: {:#?}", doc);
 
-        if dry_run {
-            println!(
-                "💡 [dry run] Would run: yq eval '{}' -i {}",
-                yq_expr,
-                path.display()
-            );
-        } else {
-            let output = Command::new("yq")
-                .args(["eval", &yq_expr, "-i", path.to_str().unwrap()])
-                .output()
-                .context("Failed to execute yq")?;
+//     if dry_run {
+//         println!("🌵 [dry run] Would patch key: {}", key);
+//         return Ok(());
+//     }
+    
+//     Ok(())
+// }
 
-            if !output.status.success() {
-                return Err(anyhow!(
-                    "yq failed: {}",
-                    String::from_utf8_lossy(&output.stderr)
-                ));
-            }
-        }
-    }
-
-    println!("✅ YAML updated via yq");
-    Ok(())
+pub fn is_deno_installed() -> bool {
+    Command::new("deno")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 pub fn apply_version_targets(

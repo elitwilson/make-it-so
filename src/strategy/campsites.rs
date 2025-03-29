@@ -2,7 +2,7 @@ use crate::git_utils::{commit_changes, create_git_tag, push_changes, push_git_ta
 use crate::models::DeploymentContext;
 use crate::strategy::build::BuildStrategy;
 use crate::strategy::deploy::DeployStrategy;
-use crate::strategy::utils::{apply_version_targets, apply_version_targets_with_yq};
+use crate::strategy::utils::{apply_version_targets};
 use anyhow::Result;
 use serde::Deserialize;
 
@@ -47,19 +47,13 @@ impl BuildStrategy for CampsitesBuildStrategy {
         }
 
         // YAML mutation
-        apply_version_targets_with_yq(
+        // NOT WORKING FOR REAL HELM CASES
+        apply_version_targets(
             &ctx.resolved_config_path,
-            &ctx.service_name,
             &strategy_config.version_targets,
             ctx.version,
             ctx.dry_run,
         )?;
-        // apply_version_targets(
-        //     &ctx.resolved_config_path,
-        //     &strategy_config.version_targets,
-        //     ctx.version,
-        //     ctx.dry_run,
-        // )?;
 
         Ok(())
 

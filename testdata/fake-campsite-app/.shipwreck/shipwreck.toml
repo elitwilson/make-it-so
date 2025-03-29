@@ -1,12 +1,17 @@
 name = "fake-app"
-deploy_strategy = "campsites"
+deploy_strategy = "deno"
 git_repo_path = "."
 
 [strategy_config]
+plugin_entrypoint = 'main.js'
 version_targets = [
   { key_path = "proxiedAppImageTag" },
   { key_path = "proxiedAppEnv", match_name = "VERSION" }
 ]
+
+# Must be Deno dependencies with valid URLs
+[plugin_dependencies]
+std_yaml = "https://deno.land/std@0.224.0/yaml/mod.ts"
 
 [environments.dev]
 namespace = "dev"

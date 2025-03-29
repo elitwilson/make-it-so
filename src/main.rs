@@ -10,6 +10,7 @@ mod models;
 mod commands;
 mod strategy;
 mod git_utils;
+mod integrations;
 
 use clap::Parser;
 use cli::{Cli, Commands};

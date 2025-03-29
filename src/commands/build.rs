@@ -18,7 +18,7 @@ pub fn run_build(service: String, env: String, version: String, dry_run: bool) -
 
     let ctx = DeploymentContext::from_config(&config, &service, &env, &version, dry_run)?;
 
-    let strategy = get_build_strategy(strategy_name)?;
+    let strategy = get_build_strategy(strategy_name, &raw_config)?;
     strategy.build(&ctx, &raw_config)?;
 
     Ok(())
