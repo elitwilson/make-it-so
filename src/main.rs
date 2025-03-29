@@ -1,7 +1,7 @@
 //! Shipwreck CLI
 //! Or: How I Learned to Stop Worrying and Wrap My Simple CI/CD Workflow In A Rust CLI Instead of a Makefile
 //! 
-//! A silly, hilarious extravagance in personal CI/CD tooling that is delightfully excessive yet likely to reduce some pain in the long run.
+//! A silly, hilarious extravagance in personal CLI tooling that is delightfully excessive yet likely to reduce some pain in the long run.
 //!
 
 mod cli;
