@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use toml::Value;
 use std::process::Command;
 
 pub fn install_deno() -> Result<()> {
@@ -32,4 +33,45 @@ pub fn install_deno() -> Result<()> {
 
   println!("✅ Deno installed. You may need to restart your shell.");
   Ok(())
+}
+
+pub fn cache_deno_dependencies(config: &Value) -> Result<()> {
+    println!("{}", config);
+
+    let deps_table = config
+        .get("deno_dependencies")
+        .and_then(Value::as_table);
+
+    let Some(table) = deps_table else {
+        println!("📦 No Deno dependencies defined — skipping cache.");
+        return Ok(());
+    };
+
+    let urls: Vec<&str> = table
+        .values()
+        .filter_map(Value::as_str)
+        .collect();
+
+    if urls.is_empty() {
+        println!("📦 No valid Deno dependencies found.");
+        return Ok(());
+    }
+
+    println!("📦 Caching Deno dependencies...");
+    for url in &urls {
+        println!("• {}", url);
+    }
+
+    let status = Command::new("deno")
+        .arg("cache")
+        .args(&urls)
+        .status()
+        .context("Failed to run `deno cache`")?;
+
+    if !status.success() {
+        return Err(anyhow::anyhow!("Deno cache failed"));
+    }
+
+    println!("✅ Dependencies cached.");
+    Ok(())
 }

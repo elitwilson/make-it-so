@@ -10,7 +10,7 @@ version_targets = [
 ]
 
 # Must be Deno dependencies with valid URLs
-[plugin_dependencies]
+[deno_dependencies]
 std_yaml = "https://deno.land/std@0.224.0/yaml/mod.ts"
 
 [environments.dev]

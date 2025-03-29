@@ -5,7 +5,6 @@ use std::{collections::HashMap, path::PathBuf};
 #[derive(Debug, Deserialize)]
 pub struct ServiceConfig {
     pub name: Option<String>,
-    pub default_env: Option<String>,
     pub deploy_strategy: Option<String>,
     pub git_repo_path: Option<String>,
 

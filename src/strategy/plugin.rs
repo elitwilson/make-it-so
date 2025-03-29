@@ -1,5 +1,5 @@
 use super::build::BuildStrategy;
-use crate::models::DeploymentContext;
+use crate::{integrations::deno::cache_deno_dependencies, models::DeploymentContext};
 use anyhow::{Context, Result, anyhow};
 use std::{
     io::Write,
@@ -18,7 +18,10 @@ impl PluginBuildStrategy {
 }
 
 impl BuildStrategy for PluginBuildStrategy {
-    fn build(&self, ctx: &DeploymentContext, _raw_config: &toml::Value) -> Result<()> {
+    fn build(&self, ctx: &DeploymentContext, raw_config: &toml::Value) -> Result<()> {
+        // 💾 Step 1: Cache Deno deps (if defined)
+        cache_deno_dependencies(raw_config)?;
+
         let json = serde_json::to_string(ctx)?;
         let mut child = Command::new(&self.path)
             .stdin(Stdio::piped())
