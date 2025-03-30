@@ -6,12 +6,20 @@ use anyhow::Result;
 
 use crate::strategy::deploy::get_deploy_strategy;
 
-fn generate_service_toml(service: &str, strategy: &str) -> String {
+fn generate_mis_toml(name: Option<&str>) -> String {
+    // If name is None, use the name of the current directory
+    let current_dir = std::env::current_dir()
+        .expect("Failed to get current directory");
+    let dir_name = current_dir
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or(".");
+
+    let proj_name = name.unwrap_or_else(|| dir_name);
+
     format!(
         r#"
-name = "{service}"
-deploy_strategy = "{strategy}"
-git_repo_path = "."
+name = "{proj_name}"
 
 [strategy_config]
 # Add your strategy-specific config here
@@ -25,50 +33,50 @@ config_path = "devops/dev.yaml"
     .to_string()
 }
 
-pub fn scaffold_plugin_if_needed(strategy: &str) -> Result<()> {
-    // Skip if it's a built-in strategy
-    if get_deploy_strategy(strategy).is_ok() {
-        println!(
-            "🧠 '{}' is a built-in strategy — skipping plugin scaffold.",
-            strategy
-        );
-        return Ok(());
-    }
+// pub fn scaffold_plugin_if_needed(strategy: &str) -> Result<()> {
+//     // Skip if it's a built-in strategy
+//     if get_deploy_strategy(strategy).is_ok() {
+//         println!(
+//             "🧠 '{}' is a built-in strategy — skipping plugin scaffold.",
+//             strategy
+//         );
+//         return Ok(());
+//     }
 
-    let plugin_path = PathBuf::from(format!(".shipwreck/{}.js", strategy));
-    if plugin_path.exists() {
-        println!("⚠️  Plugin already exists: {}", plugin_path.display());
-        return Ok(());
-    }
+//     let plugin_path = PathBuf::from(format!(".makeitso/{}.js", strategy));
+//     if plugin_path.exists() {
+//         println!("⚠️  Plugin already exists: {}", plugin_path.display());
+//         return Ok(());
+//     }
 
-    // Create plugin stub
-    let js_stub = r#"#!/usr/bin/env node
+//     // Create plugin stub
+//     let js_stub = r#"#!/usr/bin/env node
 
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (data) => {
-const ctx = JSON.parse(data);
+// process.stdin.setEncoding("utf8");
+// process.stdin.on("data", (data) => {
+// const ctx = JSON.parse(data);
 
-const { service_name, env_name, version, dry_run } = ctx;
+// const { service_name, env_name, version, dry_run } = ctx;
 
-console.log(`🚀 Deploying ${service_name} to ${env_name} (version: ${version})`);
+// console.log(`🚀 Deploying ${service_name} to ${env_name} (version: ${version})`);
 
-if (dry_run) {
-  console.log("🚫 Dry run: skipping actual deploy.");
-  return;
-}
+// if (dry_run) {
+//   console.log("🚫 Dry run: skipping actual deploy.");
+//   return;
+// }
 
-// TODO: Replace this with your real deploy logic (Azure CLI, etc)
-});
-"#;
+// // TODO: Replace this with your real deploy logic (Azure CLI, etc)
+// });
+// "#;
 
-    fs::write(&plugin_path, js_stub.trim_start())
-        .with_context(|| format!("Failed to write JS plugin to {}", plugin_path.display()))?;
+//     fs::write(&plugin_path, js_stub.trim_start())
+//         .with_context(|| format!("Failed to write JS plugin to {}", plugin_path.display()))?;
 
-    make_executable(&plugin_path)?;
+//     make_executable(&plugin_path)?;
 
-    println!("🛠️  Created JS plugin: {}", plugin_path.display());
-    Ok(())
-}
+//     println!("🛠️  Created JS plugin: {}", plugin_path.display());
+//     Ok(())
+// }
 
 fn make_executable(plugin_path: &PathBuf) -> Result<()> {
     let mut perms = fs::metadata(plugin_path)?.permissions();
@@ -77,46 +85,25 @@ fn make_executable(plugin_path: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-// Very naive PascalCase conversion
-// fn pascal_case(input: &str) -> String {
-//     input
-//         .split(|c: char| !c.is_alphanumeric())
-//         .filter(|s| !s.is_empty())
-//         .map(|s| {
-//             let mut chars = s.chars();
-//             match chars.next() {
-//                 Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
-//                 None => String::new(),
-//             }
-//         })
-//         .collect::<String>()
-// }
-
-pub fn run_init(service: String, strategy: String) -> Result<()> {
-    let shipwreck_dir = PathBuf::from(".shipwreck");
-    if !shipwreck_dir.exists() {
-        fs::create_dir_all(&shipwreck_dir)?;
-        println!("📁 Created .shipwreck/");
+pub fn run_init(name: Option<&str>) -> Result<()> {
+    let mis_dir = PathBuf::from(".makeitso");
+    if !mis_dir.exists() {
+        fs::create_dir_all(&mis_dir)?;
+        println!("📁 Created .makeitso/");
     }
 
-    // let config_path = shipwreck_dir.join(format!("{}.toml", service));
-    let config_path = shipwreck_dir.join("shipwreck.toml");
+    let config_path = mis_dir.join("mis.toml");
 
     if !config_path.exists() {
-        let toml = generate_service_toml(&service, &strategy);
+        let toml = generate_mis_toml(name);
         fs::write(&config_path, toml)?;
         println!("📝 Created config file: {}", config_path.display());
     } else {
         println!("⚠️  Config already exists: {}", config_path.display());
     }
 
-    scaffold_plugin_if_needed(&strategy)?;
+    // scaffold_plugin_if_needed(&strategy)?;
 
-    if get_deploy_strategy(&strategy).is_err() {
-        println!("🛠 Not a built-in strategy, scaffolding plugin...");
-        // scaffold code
-    }
-
-    println!("✅ Shipwreck service '{}' initialized.", service);
+    println!("✅ Make-It-So service initialized.");
     Ok(())
 }

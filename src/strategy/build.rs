@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::integrations::deno::install_deno;
-use crate::{cli::prompt_user, models::DeploymentContext};
+use crate::{cli::prompt_user, models::ExecutionContext};
 use crate::strategy::campsites::CampsitesBuildStrategy;
 use crate::strategy::plugin::PluginBuildStrategy;
 use anyhow::{Result, anyhow};
@@ -9,7 +9,7 @@ use anyhow::{Result, anyhow};
 use super::utils::is_deno_installed;
 
 pub trait BuildStrategy {
-    fn build(&self, ctx: &DeploymentContext, raw_config: &toml::Value) -> Result<()>;
+    fn build(&self, ctx: &ExecutionContext, raw_config: &toml::Value) -> Result<()>;
 }
 
 pub fn get_build_strategy(name: &str, config: &toml::Value) -> Result<Box<dyn BuildStrategy>> {
@@ -34,7 +34,7 @@ pub fn get_build_strategy(name: &str, config: &toml::Value) -> Result<Box<dyn Bu
                     anyhow!("Missing `plugin_entrypoint` in strategy_config for plugin strategy")
                 })?;
 
-            let plugin_path = PathBuf::from(".shipwreck/plugins").join(plugin_entrypoint);
+            let plugin_path = PathBuf::from(".makeitso/plugins").join(plugin_entrypoint);
 
             if !plugin_path.exists() {
                 return Err(anyhow!(

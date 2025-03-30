@@ -1,8 +1,12 @@
 [package]
-name = "shipwreck"
+name = "make-it-so"
 version = "0.1.2"
 edition = "2024"
-description = "A silly, hilarious extravagance in personal CI/CD tooling that is delightfully excessive but will ultimately yield some reduced pain and, frankly, enjoyment."
+description = "A fast CLI that runs TypeScript-powered plugins for your dev workflows."
+
+[[bin]]
+name = "mis"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.5.33", features = ["derive"] }

@@ -1,5 +1,5 @@
 use crate::git_utils::{commit_changes, create_git_tag, push_changes, push_git_tag, stage_files};
-use crate::models::DeploymentContext;
+use crate::models::ExecutionContext;
 use crate::strategy::build::BuildStrategy;
 use crate::strategy::deploy::DeployStrategy;
 use crate::strategy::utils::{apply_version_targets};
@@ -26,7 +26,7 @@ impl CampsitesBuildStrategy {
 }
 
 impl BuildStrategy for CampsitesBuildStrategy {
-    fn build(&self, ctx: &DeploymentContext, raw_config: &toml::Value) -> Result<()> {
+    fn build(&self, ctx: &ExecutionContext, raw_config: &toml::Value) -> Result<()> {
         println!("🚀 Building service with Campsites strategy");
         if ctx.dry_run {
             println!("🌵 Dry run mode enabled — no changes will be written or pushed.");
@@ -48,42 +48,14 @@ impl BuildStrategy for CampsitesBuildStrategy {
 
         // YAML mutation
         // NOT WORKING FOR REAL HELM CASES
-        apply_version_targets(
-            &ctx.resolved_config_path,
-            &strategy_config.version_targets,
-            ctx.version,
-            ctx.dry_run,
-        )?;
-
-        Ok(())
-
-        // Git actions
-        // stage_files(
-        //     &[ctx.resolved_config_path.clone()],
-        //     &ctx.git_repo_path,
+        // apply_version_targets(
+        //     &ctx.resolved_config_path,
+        //     &strategy_config.version_targets,
+        //     ctx.version,
         //     ctx.dry_run,
         // )?;
-        // commit_changes(&ctx.git_repo_path, ctx.dry_run)?;
-        // let tag = format!("v{}", ctx.version);
-        // create_git_tag(&tag, &ctx.git_repo_path, ctx.dry_run)?;
-        // push_changes(&ctx.git_repo_path, ctx.dry_run)?;
-        // push_git_tag(&tag, &ctx.git_repo_path, ctx.dry_run)?;
 
-        // // Final summary
-        // println!("\n✅ Build context:");
-        // println!("• Service:   {}", ctx.service_name);
-        // println!("• Environment: {}", ctx.env_name);
-        // println!("• Namespace:   {}", ctx.namespace);
-        // println!("• Version:     {}", ctx.version);
-        // println!("• Resolved config: {}", ctx.resolved_config_path.display());
-        // println!("• Repo path:        {}", ctx.git_repo_path.display());
-        // println!("• Tag to create:    {}", tag);
-
-        // if ctx.dry_run {
-        //     println!("\n🧪 [Dry run summary] All steps simulated successfully.");
-        // }
-
-        // Ok(())
+        Ok(())
     }
 }
 
@@ -96,18 +68,18 @@ impl CampsitesDeployStrategy {
 }
 
 impl DeployStrategy for CampsitesDeployStrategy {
-    fn deploy(&self, ctx: &DeploymentContext) -> Result<()> {
+    fn deploy(&self, ctx: &ExecutionContext) -> Result<()> {
         println!("🚀 Deploying service with Campsites strategy");
 
         println!("• Service: {}", ctx.service_name);
-        println!("• Environment: {}", ctx.env_name);
-        println!("• Namespace: {}", ctx.namespace);
-        println!("• Version: {}", ctx.version);
         println!("• Dry run: {}", ctx.dry_run);
-        println!(
-            "• Resolved config path: {}",
-            ctx.resolved_config_path.display()
-        );
+        // println!("• Environment: {}", ctx.env_name);
+        // println!("• Namespace: {}", ctx.namespace);
+        // println!("• Version: {}", ctx.version);
+        // println!(
+        //     "• Resolved config path: {}",
+        //     ctx.resolved_config_path.display()
+        // );
 
         // Later: read file, inject version, shell out to helm, etc.
 

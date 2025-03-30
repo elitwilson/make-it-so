@@ -197,6 +197,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe7db12097d22ec582439daf8618b8fdd1a7bef6270e9af3b1ebcd30893cf413"
 
 [[package]]
+name = "make-it-so"
+version = "0.1.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -303,19 +316,6 @@ dependencies = [
  "ryu",
  "serde",
  "unsafe-libyaml",
-]
-
-[[package]]
-name = "shipwreck"
-version = "0.1.2"
-dependencies = [
- "anyhow",
- "clap",
- "serde",
- "serde_json",
- "serde_yaml",
- "tempfile",
- "toml",
 ]
 
 [[package]]

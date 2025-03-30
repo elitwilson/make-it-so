@@ -1,5 +1,5 @@
 use super::build::BuildStrategy;
-use crate::{integrations::deno::cache_deno_dependencies, models::DeploymentContext};
+use crate::{integrations::deno::cache_deno_dependencies, models::ExecutionContext};
 use anyhow::{Context, Result, anyhow};
 use std::{
     io::Write,
@@ -18,9 +18,9 @@ impl PluginBuildStrategy {
 }
 
 impl BuildStrategy for PluginBuildStrategy {
-    fn build(&self, ctx: &DeploymentContext, raw_service_config: &toml::Value) -> Result<()> {
+    fn build(&self, ctx: &ExecutionContext, raw_service_config: &toml::Value) -> Result<()> {
         // Cache any [deno_dependencies] first
-        cache_deno_dependencies(raw_service_config)?;
+        // cache_deno_dependencies(raw_service_config)?;
 
         // Serialize the context into JSON to pass to the plugin
         let json = serde_json::to_string_pretty(ctx)?;
