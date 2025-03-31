@@ -4,7 +4,7 @@ use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
 
-use crate::strategy::deploy::get_deploy_strategy;
+// use crate::strategy::deploy::get_deploy_strategy;
 
 fn generate_mis_toml(name: Option<&str>) -> String {
     // If name is None, use the name of the current directory

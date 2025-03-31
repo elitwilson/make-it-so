@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crate::{config::load_shipwreck_config, models::ExecutionContext, strategy::build::get_build_strategy};
+use crate::{config::load_mis_config, models::ExecutionContext};
 
 // pub fn run_build(service: String, env: String, version: String, dry_run: bool) -> Result<()> {
 //     let (service_config, _config_path, full_config) = load_shipwreck_config()?;
@@ -16,7 +16,15 @@ use crate::{config::load_shipwreck_config, models::ExecutionContext, strategy::b
 //         .ok_or_else(|| anyhow::anyhow!("Missing strategy_config"))?;
 
 
-//     let ctx = ExecutionContext::from_config(&service_config, &service, dry_run)?;
+//     let dry_run_option = if dry_run { Some(toml::Value::Boolean(true)) } else { None };
+//     let ctx = ExecutionContext::from_parts(
+//         &service_config,
+//         &service,
+//         &env,
+//         &version,
+//         dry_run_option,
+//         full_config.clone()
+//     )?;
 
 //     // let strategy = get_build_strategy(strategy_name, &raw_service_config)?;
 //     // strategy.build(&ctx, &full_config)?;

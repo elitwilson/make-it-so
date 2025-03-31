@@ -1,12 +1,15 @@
 use std::{
-    collections::HashMap, io::Write, path::PathBuf, process::{Command, Stdio}
+    collections::HashMap,
+    io::Write,
+    path::PathBuf,
+    process::{Command, Stdio},
 };
 
 use crate::{
-    config::{load_shipwreck_config, plugins::load_plugin_manifest},
+    config::{load_mis_config, plugins::load_plugin_manifest},
     constants::PLUGIN_MANIFEST_FILE,
     integrations::deno::cache_deno_dependencies,
-    models::{ExecutionContext, PluginManifest},
+    models::{ExecutionContext, PluginManifest, PluginMeta},
 };
 use anyhow::{Context, Result};
 
@@ -16,16 +19,45 @@ pub fn run_cmd(
     dry_run: bool,
     args: HashMap<String, String>,
 ) -> Result<()> {
-    let (mis_config, _, _) = load_shipwreck_config()?;
-
     let plugin_path = PathBuf::from(".makeitso/plugins").join(&plugin_name);
     let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
     let plugin_manifest = load_plugin_manifest(&manifest_path)?;
 
-    let ctx = ExecutionContext::from_config(
-        mis_config,
-        args,
+    let env_arg = args
+        .get("env")
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("Missing required argument: --env"))?;
+
+    let version_arg = args
+        .get("version")
+        .cloned()
+        .unwrap_or_else(|| "0.0.0".to_string()); // default fallback or bail
+
+    let mut plugin_args = HashMap::new();
+
+    plugin_args.insert("env".to_string(), serde_json::Value::String(env_arg));
+    plugin_args.insert(
+        "version".to_string(),
+        serde_json::Value::String(version_arg),
+    );
+
+    if dry_run {
+        plugin_args.insert("dry_run".to_string(), serde_json::Value::Bool(true));
+    }
+
+    let project_root = std::env::current_dir()?.to_string_lossy().to_string();
+    // let env_vars = std::env::vars().collect::<HashMap<_, _>>();
+    let meta = PluginMeta {
+        plugin_name: plugin_name.clone(),
+        plugin_description: plugin_manifest.plugin.plugin_description.clone(),
+        plugin_version: "todo".to_string(), // figure out how to get this
+    };
+
+    let ctx = ExecutionContext::from_parts(
+        plugin_args,
         plugin_manifest.user_config.clone(),
+        project_root,
+        meta,
         dry_run,
     )?;
 
@@ -43,7 +75,6 @@ pub fn run_cmd(
 
     Ok(())
 }
-
 
 pub fn execute_plugin(
     dir: &PathBuf,

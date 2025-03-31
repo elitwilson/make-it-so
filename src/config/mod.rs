@@ -6,7 +6,7 @@ use anyhow::{Context, Result};
 use toml::Value;
 use crate::models::MakeItSoConfig;
 
-pub fn load_shipwreck_config() -> Result<(MakeItSoConfig, PathBuf, Value)> {
+pub fn load_mis_config() -> Result<(MakeItSoConfig, PathBuf, Value)> {
   let shipwreck_base_path = ".makeitso";
 
   let config_path = PathBuf::from(shipwreck_base_path).join(format!("mis.toml"));

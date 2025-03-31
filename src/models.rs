@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::{collections::HashMap, hash::Hash, path::PathBuf};
 
 #[derive(Debug, Deserialize)]
@@ -27,14 +28,17 @@ pub struct EnvConfig {
     #[serde(flatten)]
     pub extra: HashMap<String, toml::Value>,
 }
-
 #[derive(Serialize)]
 pub struct ExecutionContext {
-    pub args: HashMap<String, String>,
-    // pub plugin_manifest: Option<PluginManifest>,
-    // pub service_name: &'a str, // Deprecated... get rid of me
+    pub plugin_args: HashMap<String, Value>,
+    pub config: Value, // <-- plugin-specific config
+    pub project_root: String,
+    // pub env: HashMap<String, String>,
+    pub meta: PluginMeta,
     pub dry_run: bool,
-    pub plugin_config: toml::Value,
+
+    #[serde(skip_serializing)]
+    pub log: Option<()>, // ignored during serialization
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,10 +53,22 @@ pub struct PluginManifest {
     pub user_config: Option<toml::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PluginMeta {
-    pub name: String,
-    pub description: Option<String>,
+    pub plugin_name: String,
+    pub plugin_description: Option<String>,
+    pub plugin_version: String,
+}
+
+#[derive(Serialize)]
+struct PluginContext {
+    args: HashMap<String, Value>,
+    config: Value, // 👈 untyped JSON blob—plugin owns this
+    project_root: String,
+    env: HashMap<String, String>,
+    meta: PluginMeta,
+    #[serde(skip_serializing)]
+    log: Option<()>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -75,21 +91,33 @@ pub struct PluginOption {
 }
 
 impl ExecutionContext {
-    pub fn from_config(
-        config:  MakeItSoConfig,
-        args: HashMap<String, String>,
+    pub fn from_parts(
+        args: HashMap<String, Value>,
         plugin_user_config: Option<toml::Value>,
+        project_root: String,
+        meta: PluginMeta,
         dry_run: bool,
     ) -> Result<Self> {
-        let plugin_config = plugin_user_config.unwrap_or_else(|| {
+        let plugin_config_toml = plugin_user_config.unwrap_or_else(|| {
             toml::Value::Table(toml::map::Map::new())
         });
 
+        let plugin_config_json = toml_to_json(plugin_config_toml);
+
         Ok(Self {
-            args,
+            plugin_args: args,
+            config: plugin_config_json,
+            project_root,
+            meta,
             dry_run,
-            plugin_config,
+            log: None,
         })
     }
 }
 
+
+// ToDo: Move this to a utility module
+fn toml_to_json(val: toml::Value) -> serde_json::Value {
+    let s = toml::to_string(&val).expect("Failed to stringify TOML");
+    toml::from_str::<serde_json::Value>(&s).expect("Failed to parse TOML as JSON")
+}
