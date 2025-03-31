@@ -35,6 +35,14 @@ pub fn install_deno() -> Result<()> {
   Ok(())
 }
 
+pub fn is_deno_installed() -> bool {
+    Command::new("deno")
+        .arg("--version")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 pub fn cache_deno_dependencies(deps: &HashMap<String, String>) -> Result<()> {
     if deps.is_empty() {
         println!("📦 No Deno dependencies defined — skipping cache.");

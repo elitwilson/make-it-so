@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    config::{load_mis_config, plugins::load_plugin_manifest},
+    config::plugins::load_plugin_manifest,
     constants::PLUGIN_MANIFEST_FILE,
     integrations::deno::cache_deno_dependencies,
     models::{ExecutionContext, PluginManifest, PluginMeta},
