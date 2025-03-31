@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use anyhow::{Context, anyhow};
 use clap::Parser;
 use cli::{Cli, Commands};
-use commands::{init::run_init, run::run_cmd};
+use commands::{create::create_plugin, init::run_init, run::run_cmd};
 use config::plugins::load_plugin_manifest;
 
 fn main() -> anyhow::Result<()> {
@@ -53,6 +53,8 @@ fn main() -> anyhow::Result<()> {
             let plugin_manifest_path = plugin_dir.join("plugin.toml");
             let plugin_manifest = load_plugin_manifest(&plugin_manifest_path)?;
 
+            // Check if the command exists in the plugin manifest
+            // ToDo: Implement this check
             let command = plugin_manifest
                 .commands
                 .get(command_name)
@@ -82,14 +84,15 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
-            // Check if the command exists in the plugin manifest
-            // ToDo: Implement this check
+
 
             // Run the command
             run_cmd(plugin_name, command_name, dry_run, parsed_args)?;
         }
 
-        Commands::Create {} => {}
+        Commands::Create { name } => {
+            create_plugin(&name)?;
+        }
     }
 
     Ok(())

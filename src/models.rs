@@ -55,9 +55,9 @@ pub struct PluginManifest {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct PluginMeta {
-    pub plugin_name: String,
-    pub plugin_description: Option<String>,
-    pub plugin_version: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub version: String,
 }
 
 #[derive(Serialize)]

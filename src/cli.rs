@@ -35,7 +35,8 @@ pub enum Commands {
 
     },
     Create {
-        
+        #[arg(value_name = "plugin_name")]
+        name: String,
     }
 }
 

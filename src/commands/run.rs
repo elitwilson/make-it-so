@@ -17,29 +17,24 @@ pub fn run_cmd(
     plugin_name: String,
     command_name: &str,
     dry_run: bool,
-    args: HashMap<String, String>,
+    plugin_raw_args: HashMap<String, String>,
 ) -> Result<()> {
     let plugin_path = PathBuf::from(".makeitso/plugins").join(&plugin_name);
     let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
     let plugin_manifest = load_plugin_manifest(&manifest_path)?;
 
-    let env_arg = args
-        .get("env")
-        .cloned()
-        .ok_or_else(|| anyhow::anyhow!("Missing required argument: --env"))?;
-
-    let version_arg = args
-        .get("version")
-        .cloned()
-        .unwrap_or_else(|| "0.0.0".to_string()); // default fallback or bail
-
-    let mut plugin_args = HashMap::new();
-
-    plugin_args.insert("env".to_string(), serde_json::Value::String(env_arg));
-    plugin_args.insert(
-        "version".to_string(),
-        serde_json::Value::String(version_arg),
-    );
+    // let mut plugin_args = HashMap::new();
+    let mut plugin_args: serde_json::Map<String, serde_json::Value> = plugin_raw_args
+        .into_iter()
+        .map(|(k, v)| {
+            let value = match v.as_str() {
+                "true" => serde_json::Value::Bool(true),
+                "false" => serde_json::Value::Bool(false),
+                _ => serde_json::Value::String(v),
+            };
+            (k, value)
+        })
+        .collect();
 
     if dry_run {
         plugin_args.insert("dry_run".to_string(), serde_json::Value::Bool(true));
@@ -48,13 +43,13 @@ pub fn run_cmd(
     let project_root = std::env::current_dir()?.to_string_lossy().to_string();
     // let env_vars = std::env::vars().collect::<HashMap<_, _>>();
     let meta = PluginMeta {
-        plugin_name: plugin_name.clone(),
-        plugin_description: plugin_manifest.plugin.plugin_description.clone(),
-        plugin_version: "todo".to_string(), // figure out how to get this
+        name: plugin_name.clone(),
+        description: plugin_manifest.plugin.description.clone(),
+        version: "todo".to_string(), // figure out how to get this
     };
 
     let ctx = ExecutionContext::from_parts(
-        plugin_args,
+        plugin_args.into_iter().collect::<HashMap<_, _>>(),
         plugin_manifest.user_config.clone(),
         project_root,
         meta,
