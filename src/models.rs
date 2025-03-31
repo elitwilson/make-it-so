@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, hash::Hash, path::PathBuf};
 
 #[derive(Debug, Deserialize)]
 pub struct MakeItSoConfig {
@@ -29,12 +29,12 @@ pub struct EnvConfig {
 }
 
 #[derive(Serialize)]
-pub struct ExecutionContext<'a> {
-    pub service_name: &'a str,
+pub struct ExecutionContext {
+    pub args: HashMap<String, String>,
+    // pub plugin_manifest: Option<PluginManifest>,
+    // pub service_name: &'a str, // Deprecated... get rid of me
     pub dry_run: bool,
-    // pub resolved_config_path: PathBuf,
-    // pub git_repo_path: PathBuf,
-    // pub raw_env_config: &'a crate::models::EnvConfig,
+    pub plugin_config: toml::Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -44,6 +44,9 @@ pub struct PluginManifest {
 
     #[serde(default)]
     pub deno_dependencies: HashMap<String, String>, // name -> URL
+
+    #[serde(default)]
+    pub user_config: Option<toml::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -71,32 +74,22 @@ pub struct PluginOption {
     pub description: Option<String>,
 }
 
-impl<'a> ExecutionContext<'a> {
+impl ExecutionContext {
     pub fn from_config(
-        config: &'a MakeItSoConfig,
-        service_file_name: &'a str,
+        config:  MakeItSoConfig,
+        args: HashMap<String, String>,
+        plugin_user_config: Option<toml::Value>,
         dry_run: bool,
     ) -> Result<Self> {
-
-        // let config_path = env_config
-        //     .config_path
-        //     .as_ref()
-        //     .with_context(|| format!("No config_path defined for env '{}'", env))?;
-
-        // let resolved_config_path = PathBuf::from(config_path)
-        //     .canonicalize()
-        //     .with_context(|| format!("Failed to resolve path: {}", config_path))?;
+        let plugin_config = plugin_user_config.unwrap_or_else(|| {
+            toml::Value::Table(toml::map::Map::new())
+        });
 
         Ok(Self {
-            service_name: config.name.as_deref().unwrap_or(service_file_name),
+            args,
             dry_run,
-            // resolved_config_path,
-            // namespace: env_config
-            //     .namespace
-            //     .as_deref()
-            //     .unwrap_or("default_namespace"),
-            // git_repo_path: resolved_repo_path,
-            // raw_env_config: env_config,
+            plugin_config,
         })
     }
 }
+

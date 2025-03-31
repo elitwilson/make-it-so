@@ -71,7 +71,6 @@ impl DeployStrategy for CampsitesDeployStrategy {
     fn deploy(&self, ctx: &ExecutionContext) -> Result<()> {
         println!("🚀 Deploying service with Campsites strategy");
 
-        println!("• Service: {}", ctx.service_name);
         println!("• Dry run: {}", ctx.dry_run);
         // println!("• Environment: {}", ctx.env_name);
         // println!("• Namespace: {}", ctx.namespace);

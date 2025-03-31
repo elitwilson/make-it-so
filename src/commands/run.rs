@@ -1,7 +1,5 @@
 use std::{
-    io::Write,
-    path::PathBuf,
-    process::{Command, Stdio},
+    collections::HashMap, io::Write, path::PathBuf, process::{Command, Stdio}
 };
 
 use crate::{
@@ -12,23 +10,24 @@ use crate::{
 };
 use anyhow::{Context, Result};
 
-pub fn run_cmd(plugin_name: String, command_name: &str, dry_run: bool) -> Result<()> {
-    let (mis_config, _config_path, full_config) = load_shipwreck_config()?;
+pub fn run_cmd(
+    plugin_name: String,
+    command_name: &str,
+    dry_run: bool,
+    args: HashMap<String, String>,
+) -> Result<()> {
+    let (mis_config, _, _) = load_shipwreck_config()?;
 
-    let raw_mis_config = mis_config
-        .strategy_config
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("Missing strategy_config"))?;
+    let plugin_path = PathBuf::from(".makeitso/plugins").join(&plugin_name);
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
+    let plugin_manifest = load_plugin_manifest(&manifest_path)?;
 
-    let ctx = ExecutionContext::from_config(&mis_config, &plugin_name, dry_run)?;
-
-    let plugin_dir = PathBuf::from(".makeitso")
-        .join("plugins")
-        .join(&plugin_name);
-
-
-    let plugin_manifest = load_plugin_manifest(&plugin_dir.join(PLUGIN_MANIFEST_FILE))?;
-
+    let ctx = ExecutionContext::from_config(
+        mis_config,
+        args,
+        plugin_manifest.user_config.clone(),
+        dry_run,
+    )?;
 
     let command = plugin_manifest
         .commands
@@ -40,12 +39,11 @@ pub fn run_cmd(plugin_name: String, command_name: &str, dry_run: bool) -> Result
             )
         })?;
 
-    let script = &command.script;
-
-    execute_plugin(&plugin_dir, &script, &ctx, &plugin_manifest)?;
+    execute_plugin(&plugin_path, &command.script, &ctx, &plugin_manifest)?;
 
     Ok(())
 }
+
 
 pub fn execute_plugin(
     dir: &PathBuf,

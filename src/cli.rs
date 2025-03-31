@@ -1,4 +1,4 @@
-use std::io::{self, Write};
+use std::{collections::HashMap, io::{self, Write}};
 use clap::{Parser, Subcommand};
 
 /// Your CLI entrypoint definition
@@ -22,10 +22,20 @@ pub enum Commands {
     Run {
         /// The name of the plugin to run (e.g. api, worker)
         plugin: String,
-
+        
         /// Run without actually making changes
         #[arg(long)]
         dry_run: bool,
+
+        /// Any extra args passed to the plugin command
+        // #[arg(long, value_parser, num_args=1.., allow_hyphen_values=true)]
+        #[arg(trailing_var_arg = true)]
+        args: Vec<String>,
+
+
+    },
+    Create {
+        
     }
 }
 
