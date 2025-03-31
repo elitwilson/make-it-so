@@ -1,8 +1,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::utils::find_project_root;
+
 pub fn create_plugin(name: &str) -> anyhow::Result<()> {
-    let root_dir = PathBuf::from(".makeitso");
+    let root_dir = find_project_root()?;
     if !root_dir.exists() {
         anyhow::bail!(
             "🛑 No Make It So project found in this directory.\n→ Run `mis init` first to initialize your project."

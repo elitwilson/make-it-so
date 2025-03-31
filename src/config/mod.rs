@@ -6,6 +6,8 @@ use anyhow::{Context, Result};
 use toml::Value;
 use crate::models::MakeItSoConfig;
 
+// This is where you'd load Make It So's config file.
+// But it's not used anywhere yet.
 pub fn load_mis_config() -> Result<(MakeItSoConfig, PathBuf, Value)> {
   let shipwreck_base_path = ".makeitso";
 

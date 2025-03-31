@@ -60,34 +60,9 @@ pub struct PluginMeta {
     pub version: String,
 }
 
-#[derive(Serialize)]
-struct PluginContext {
-    args: HashMap<String, Value>,
-    config: Value, // 👈 untyped JSON blob—plugin owns this
-    project_root: String,
-    env: HashMap<String, String>,
-    meta: PluginMeta,
-    #[serde(skip_serializing)]
-    log: Option<()>,
-}
-
 #[derive(Debug, Deserialize)]
 pub struct PluginCommand {
-    pub description: Option<String>,
     pub script: String,
-    pub entrypoint: String,
-
-    #[serde(default)]
-    pub options: HashMap<String, PluginOption>,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct PluginOption {
-    #[serde(rename = "type")]
-    pub type_: String, // "string", "bool", "number"
-    pub required: Option<bool>,
-    pub default: Option<toml::Value>,
-    pub description: Option<String>,
 }
 
 impl ExecutionContext {

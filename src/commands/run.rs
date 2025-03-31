@@ -9,7 +9,7 @@ use crate::{
     config::plugins::load_plugin_manifest,
     constants::PLUGIN_MANIFEST_FILE,
     integrations::deno::cache_deno_dependencies,
-    models::{ExecutionContext, PluginManifest, PluginMeta},
+    models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root,
 };
 use anyhow::{Context, Result};
 
@@ -19,8 +19,8 @@ pub fn run_cmd(
     dry_run: bool,
     plugin_raw_args: HashMap<String, String>,
 ) -> Result<()> {
-    let plugin_path = PathBuf::from(".makeitso/plugins").join(&plugin_name);
-    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
+    let plugin_path = validate_plugin_exists(&plugin_name)?;
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);    
     let plugin_manifest = load_plugin_manifest(&manifest_path)?;
 
     // let mut plugin_args = HashMap::new();
@@ -69,6 +69,43 @@ pub fn run_cmd(
     execute_plugin(&plugin_path, &command.script, &ctx, &plugin_manifest)?;
 
     Ok(())
+}
+
+fn validate_plugin_exists(plugin_name: &str) -> Result<PathBuf> {
+    let root = find_project_root()?;
+
+    if !root.exists() {
+        anyhow::bail!(
+            "🛑 You're not inside a Make It So project.\n\
+             → Make sure you're in the project root (where .makeitso/ lives).\n\
+             → If you haven't set it up yet, run `mis init`."
+        );
+    }
+
+    let plugin_path = root.join(".makeitso/plugins").join(plugin_name);
+    println!("Plugin path: {}", plugin_path.display());
+
+    if !plugin_path.exists() {
+        anyhow::bail!(
+            "🛑 Plugin '{}' not found in .makeitso/plugins.\n\
+             → Did you run `mis create plugin {}`?",
+            plugin_name,
+            plugin_name
+        );
+    }
+
+    let manifest_path = plugin_path.join("plugin.toml");
+    if !manifest_path.exists() {
+        anyhow::bail!(
+            "🛑 plugin.toml not found for plugin '{}'.\n\
+             → Expected to find: {}\n\
+             → Did something delete it?",
+            plugin_name,
+            manifest_path.display()
+        );
+    }
+
+    Ok(plugin_path)
 }
 
 pub fn execute_plugin(

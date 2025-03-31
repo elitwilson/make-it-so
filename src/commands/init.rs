@@ -1,8 +1,9 @@
-use anyhow::Context;
 use std::path::PathBuf;
 use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
+
+use crate::utils::find_project_root;
 
 // use crate::strategy::deploy::get_deploy_strategy;
 
@@ -33,50 +34,6 @@ config_path = "devops/dev.yaml"
     .to_string()
 }
 
-// pub fn scaffold_plugin_if_needed(strategy: &str) -> Result<()> {
-//     // Skip if it's a built-in strategy
-//     if get_deploy_strategy(strategy).is_ok() {
-//         println!(
-//             "🧠 '{}' is a built-in strategy — skipping plugin scaffold.",
-//             strategy
-//         );
-//         return Ok(());
-//     }
-
-//     let plugin_path = PathBuf::from(format!(".makeitso/{}.js", strategy));
-//     if plugin_path.exists() {
-//         println!("⚠️  Plugin already exists: {}", plugin_path.display());
-//         return Ok(());
-//     }
-
-//     // Create plugin stub
-//     let js_stub = r#"#!/usr/bin/env node
-
-// process.stdin.setEncoding("utf8");
-// process.stdin.on("data", (data) => {
-// const ctx = JSON.parse(data);
-
-// const { service_name, env_name, version, dry_run } = ctx;
-
-// console.log(`🚀 Deploying ${service_name} to ${env_name} (version: ${version})`);
-
-// if (dry_run) {
-//   console.log("🚫 Dry run: skipping actual deploy.");
-//   return;
-// }
-
-// // TODO: Replace this with your real deploy logic (Azure CLI, etc)
-// });
-// "#;
-
-//     fs::write(&plugin_path, js_stub.trim_start())
-//         .with_context(|| format!("Failed to write JS plugin to {}", plugin_path.display()))?;
-
-//     make_executable(&plugin_path)?;
-
-//     println!("🛠️  Created JS plugin: {}", plugin_path.display());
-//     Ok(())
-// }
 
 fn make_executable(plugin_path: &PathBuf) -> Result<()> {
     let mut perms = fs::metadata(plugin_path)?.permissions();
@@ -86,7 +43,7 @@ fn make_executable(plugin_path: &PathBuf) -> Result<()> {
 }
 
 pub fn run_init(name: Option<&str>) -> Result<()> {
-    let mis_dir = PathBuf::from(".makeitso");
+    let mis_dir = find_project_root()?;
     if !mis_dir.exists() {
         fs::create_dir_all(&mis_dir)?;
         println!("📁 Created .makeitso/");

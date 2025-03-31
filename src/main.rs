@@ -11,14 +11,14 @@ mod constants;
 mod git_utils;
 mod integrations;
 mod models;
+mod utils;
 
 use std::collections::HashMap;
 
-use anyhow::{Context, anyhow};
+use anyhow::anyhow;
 use clap::Parser;
 use cli::{Cli, Commands};
 use commands::{create::create_plugin, init::run_init, run::run_cmd};
-use config::plugins::load_plugin_manifest;
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -44,33 +44,6 @@ fn main() -> anyhow::Result<()> {
             let command_name = parts[1];
 
             let plugin_name = parts[0].to_string();
-            // Check if the plugin exists
-            let plugin_dir = std::path::PathBuf::from(".makeitso")
-                .join("plugins")
-                .join(&plugin_name);
-
-            // Extract plugin information
-            let plugin_manifest_path = plugin_dir.join("plugin.toml");
-            let plugin_manifest = load_plugin_manifest(&plugin_manifest_path)?;
-
-            // Check if the command exists in the plugin manifest
-            // ToDo: Implement this check
-            let command = plugin_manifest
-                .commands
-                .get(command_name)
-                .with_context(|| {
-                    format!(
-                        "Command '{}' not found in plugin '{}'",
-                        command_name, plugin_name
-                    )
-                })?;
-
-            if !plugin_dir.exists() {
-                return Err(anyhow!(
-                    "Plugin '{}' not found in .makeitso/plugins",
-                    plugin_name
-                ));
-            }
 
             let mut parsed_args = HashMap::new();
             let mut iter = args.iter();
@@ -83,8 +56,6 @@ fn main() -> anyhow::Result<()> {
                     }
                 }
             }
-
-
 
             // Run the command
             run_cmd(plugin_name, command_name, dry_run, parsed_args)?;
