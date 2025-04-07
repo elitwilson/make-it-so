@@ -36,7 +36,7 @@ Make It So will handle downloading and installing Deno for you, so you’re read
 
 ## 🗂 What It Does
 
-- Creates a `.makeitso/` folder in your project root.
+- Creates a `.makeitso/` folder in your current directory.
 - Lets you define your own CLI commands with scaffolded TypeScript plugins.
 - Each plugin runs in Deno and can define its own dependencies and config.
 - Keeps everything project-local — no global installs or `node_modules` clutter.
@@ -54,7 +54,7 @@ Make It So will handle downloading and installing Deno for you, so you’re read
 
 ## 🐄 Example Command
 
-The scaffolded plugin includes a `moo` command using [`cowsay`](https://deno.land/x/cowsay):
+The scaffolded plugin includes a `moo` command using the [`cowsay`](https://deno.land/x/cowsay) library':
 
 ```sh
 mis run my-plugin:moo
@@ -143,3 +143,6 @@ console.log("message:", ctx.config.message);
 ## ✨ That's It
 
 Build your own CLI commands for your project, powered by Deno + TypeScript, all wrapped in a slick developer workflow.
+
+## Coming Soon:
+- Typescript dev environment setup instructions
