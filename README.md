@@ -54,7 +54,7 @@ Make It So will handle downloading and installing Deno for you, so you’re read
 
 ## 🐄 Example Command
 
-The scaffolded plugin includes a `moo` command using the [`cowsay`](https://deno.land/x/cowsay) library':
+The scaffolded plugin includes a `moo` command using the [`cowsay`](https://deno.land/x/cowsay) library:
 
 ```sh
 mis run my-plugin:moo
