@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    config::plugins::load_plugin_manifest,
+    config::{load_mis_config, plugins::load_plugin_manifest},
     constants::PLUGIN_MANIFEST_FILE,
     integrations::deno::cache_deno_dependencies,
     models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root,
@@ -48,9 +48,17 @@ pub fn run_cmd(
         version: "todo".to_string(), // figure out how to get this
     };
 
+    let (mis_config, _, __) = load_mis_config()?;
+
+    let plugin_args_toml: HashMap<String, toml::Value> = plugin_args
+        .into_iter()
+        .map(|(k, v)| (k, json_to_toml(v)))
+        .collect();
+
     let ctx = ExecutionContext::from_parts(
-        plugin_args.into_iter().collect::<HashMap<_, _>>(),
+        plugin_args_toml,   
         plugin_manifest.user_config.clone(),
+        mis_config.project_variables,
         project_root,
         meta,
         dry_run,
@@ -69,6 +77,10 @@ pub fn run_cmd(
     execute_plugin(&plugin_path, &command.script, &ctx, &plugin_manifest)?;
 
     Ok(())
+}
+
+fn json_to_toml(value: serde_json::Value) -> toml::Value {
+    toml::Value::try_from(value).expect("Failed to convert plugin arg from JSON to TOML")
 }
 
 fn validate_plugin_exists(plugin_name: &str) -> Result<PathBuf> {

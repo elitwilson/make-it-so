@@ -1,21 +1,22 @@
 use anyhow::{Context, Result};
+use toml::Value as TomlValue;
+use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::{collections::HashMap, hash::Hash, path::PathBuf};
 
 #[derive(Debug, Deserialize)]
 pub struct MakeItSoConfig {
     pub name: Option<String>,
-    // pub deploy_strategy: Option<String>,
-    // pub git_repo_path: Option<String>,
 
-    #[serde(rename = "plugins")]
-    pub plugins: Option<toml::Value>,
+    #[serde(rename = "project_variables", default)]
+    pub project_variables: HashMap<String, TomlValue>,
+    // #[serde(rename = "plugins")]
+    // pub plugins: Option<toml::Value>,
 
-    pub environments: HashMap<String, EnvConfig>,
+    // pub environments: HashMap<String, EnvConfig>,
 
-    #[serde(rename = "strategy_config")]
-    pub strategy_config: Option<toml::Value>,
+    // #[serde(rename = "strategy_config")]
+    // pub strategy_config: Option<toml::Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -26,14 +27,14 @@ pub struct EnvConfig {
     pub config_path: Option<String>,
 
     #[serde(flatten)]
-    pub extra: HashMap<String, toml::Value>,
+    pub extra: HashMap<String, TomlValue>,
 }
 #[derive(Serialize)]
 pub struct ExecutionContext {
-    pub plugin_args: HashMap<String, Value>,
-    pub config: Value, // <-- plugin-specific config
+    pub plugin_args: HashMap<String, TomlValue>,
+    pub config: JsonValue, // <-- plugin-specific config
+    pub project_variables: JsonValue, // <-- project-scoped variables
     pub project_root: String,
-    // pub env: HashMap<String, String>,
     pub meta: PluginMeta,
     pub dry_run: bool,
 
@@ -50,7 +51,7 @@ pub struct PluginManifest {
     pub deno_dependencies: HashMap<String, String>, // name -> URL
 
     #[serde(default)]
-    pub user_config: Option<toml::Value>,
+    pub user_config: Option<TomlValue>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -67,21 +68,29 @@ pub struct PluginCommand {
 
 impl ExecutionContext {
     pub fn from_parts(
-        args: HashMap<String, Value>,
-        plugin_user_config: Option<toml::Value>,
+        args: HashMap<String, TomlValue>,
+        plugin_user_config: Option<TomlValue>,
+        project_variables: HashMap<String, TomlValue>,
         project_root: String,
         meta: PluginMeta,
         dry_run: bool,
-    ) -> Result<Self> {
-        let plugin_config_toml = plugin_user_config.unwrap_or_else(|| {
-            toml::Value::Table(toml::map::Map::new())
-        });
+    ) -> anyhow::Result<Self> {
+        // 1) plugin config (TOML) → JSON
+        let plugin_toml = plugin_user_config
+            .unwrap_or_else(|| TomlValue::Table(toml::map::Map::new()));
+        let plugin_config_json: JsonValue = toml_to_json(plugin_toml);
 
-        let plugin_config_json = toml_to_json(plugin_config_toml);
+        // 2) project vars (flat map) → TOML table → JSON
+        let mut vars_table = toml::map::Map::new();
+        for (k, v) in project_variables {
+            vars_table.insert(k, v);
+        }
+        let project_vars_json: JsonValue = toml_to_json(TomlValue::Table(vars_table));
 
         Ok(Self {
             plugin_args: args,
             config: plugin_config_json,
+            project_variables: project_vars_json,
             project_root,
             meta,
             dry_run,
@@ -91,8 +100,8 @@ impl ExecutionContext {
 }
 
 
+
 // ToDo: Move this to a utility module
-fn toml_to_json(val: toml::Value) -> serde_json::Value {
-    let s = toml::to_string(&val).expect("Failed to stringify TOML");
-    toml::from_str::<serde_json::Value>(&s).expect("Failed to parse TOML as JSON")
+fn toml_to_json(val: TomlValue) -> JsonValue {
+    serde_json::to_value(val).expect("Failed to convert TOML to JSON")
 }

@@ -1,3 +1,124 @@
-## Issues:
-- Specifying the project in the CLI seems superfluous if we're already 
-- Some toml config may be superfluous: We can probably assume that the root of the project is the git repo
+# 🧙‍♂️ Make It So
+
+**Make It So** is a CLI framework that lets you build your own project-specific CLI commands using TypeScript plugins powered by Deno.
+
+## 🚀 Quickstart
+
+```sh
+mis init
+mis create my-plugin
+mis run my-plugin:moo
+```
+
+## 🗂 What It Does
+
+- Creates a `.makeitso/` folder in your project root.
+- Lets you define your own CLI commands with scaffolded TypeScript plugins.
+- Each plugin runs in Deno and can define its own dependencies and config.
+- Keeps everything project-local — no global installs or `node_modules` clutter.
+
+## 🧱 Plugin Workflow
+
+1. `mis init`  
+   Creates `.makeitso/` and a `mis.toml` config.
+
+2. `mis create my-plugin`  
+   Scaffolds a plugin inside `.makeitso/plugins/my-plugin`.
+
+3. `mis run my-plugin:your-command`  
+   Runs a specific command defined by your plugin.
+
+## 🐄 Example Command
+
+The scaffolded plugin includes a `moo` command using [`cowsay`](https://deno.land/x/cowsay):
+
+```sh
+mis run my-plugin:moo
+```
+
+You'll see:
+
+```
+ ____________
+< Moo It So 🪄 >
+ ------------
+        \   ^__^
+         \  (oo)\_______
+            (__)\       )\/\
+                ||----w |
+                ||     ||
+```
+
+## 📄 Plugin Manifest (`plugin.toml`)
+
+Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes a `plugin.toml` file that describes what it does and how to run it.
+
+### 🔧 Full Example
+
+```toml
+[plugin]
+name = "test-plugin"
+version = "0.1.0"
+description = "A plugin scaffolded by Make It So."
+
+[commands.moo]
+description = "Moo!!!!"
+script = "./test-plugin.ts"
+entrypoint = "moo"
+
+[deno_dependencies]
+cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
+
+[user_config]
+message = "Moo It So 🪄"
+```
+
+### 🧩 Plugin Fields
+
+| Field          | Type   | Description                                |
+|----------------|--------|--------------------------------------------|
+| `name`         | string | Plugin name (should match folder name)     |
+| `version`      | string | Plugin version (e.g. `0.1.0`)              |
+| `description`  | string | Description of what this plugin does       |
+
+### 🚀 Commands
+
+Define commands under `[commands.<command-name>]`:
+
+| Field         | Type   | Description                                |
+|---------------|--------|--------------------------------------------|
+| `description` | string | Description shown in help output           |
+| `script`      | string | Path to the `.ts` script to run            |
+| `entrypoint`  | string | The exported function to call from script  |
+
+### 📦 Dependencies
+
+List external Deno modules used by the plugin:
+
+```toml
+[deno_dependencies]
+cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
+```
+
+These are available in your script:
+
+```ts
+import { say } from "cowsay";
+```
+
+### ⚙️ Plugin Config
+
+Under `[user_config]`, you can define any config your plugin script needs. It's available via `ctx.config` in TypeScript:
+
+```ts
+console.log("message:", ctx.config.message);
+```
+
+---
+
+## ✨ That's It
+
+Build your own CLI commands for your project, powered by Deno + TypeScript, all wrapped in a slick developer workflow.
+
+> Make it powerful. Make it flexible. **Make It So.**
+

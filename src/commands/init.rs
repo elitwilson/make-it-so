@@ -20,14 +20,12 @@ fn generate_mis_toml(name: Option<&str>) -> String {
 
     format!(
         r#"
-name = "{proj_name}"
+name = "make-it-so-cli"
 
-[strategy_config]
-# Add your strategy-specific config here
-
-[environments.dev]
-namespace = "dev"
-config_path = "devops/dev.yaml"
+# 👇 Project-scoped settings available to all plugins
+[project_variables]
+# — User-created (optional) env variables accessible by plugins through the ctx object:
+foo = "bar"            # ← EXAMPLE of a project-scoped variable
 "#
     )
     .trim_start()
