@@ -4,14 +4,18 @@ use std::path::PathBuf;
 use crate::utils::find_project_root;
 
 pub fn create_plugin(name: &str) -> anyhow::Result<()> {
-    let root_dir = find_project_root()?;
-    if !root_dir.exists() {
+    let root_dir = find_project_root()
+        .ok_or_else(|| anyhow::anyhow!("Failed to find project root"))?;
+
+    let makeitso_dir = root_dir.join(".makeitso");
+
+    if !makeitso_dir.exists() {
         anyhow::bail!(
             "🛑 No Make It So project found in this directory.\n→ Run `mis init` first to initialize your project."
         );
     }
 
-    let plugin_dir = root_dir.join("plugins").join(name);
+    let plugin_dir = makeitso_dir.join("plugins").join(name);
 
     if plugin_dir.exists() {
         anyhow::bail!("Plugin '{}' already exists", name);

@@ -43,13 +43,23 @@ fn make_executable(plugin_path: &PathBuf) -> Result<()> {
 }
 
 pub fn run_init(name: Option<&str>) -> Result<()> {
-    let mis_dir = find_project_root()?;
-    if !mis_dir.exists() {
-        fs::create_dir_all(&mis_dir)?;
+    if let Some(existing_root) = find_project_root() {
+        anyhow::bail!(
+            "🛑 Already inside a Make It So project (found at {}).\n\
+             → You can't re-initialize within an existing project.",
+            existing_root.display()
+        );
+    }
+
+    let current_dir = std::env::current_dir()?;
+    let makeitso_dir = current_dir.join(".makeitso");
+
+    if !makeitso_dir.exists() {
+        fs::create_dir_all(&makeitso_dir)?;
         println!("📁 Created .makeitso/");
     }
 
-    let config_path = mis_dir.join("mis.toml");
+    let config_path = makeitso_dir.join("mis.toml");
 
     if !config_path.exists() {
         let toml = generate_mis_toml(name);

@@ -1,23 +1,20 @@
 use std::path::PathBuf;
-use anyhow::Result;
 
-pub fn find_project_root() -> Result<PathBuf> {
-  let mut current = std::env::current_dir()?;
+pub fn find_project_root() -> Option<PathBuf> {
+    let mut current = std::env::current_dir().ok()?;
 
-  loop {
-      let candidate = current.join(".makeitso");
-      if candidate.exists() && candidate.is_dir() {
-          return Ok(current);
-      }
+    loop {
+        let candidate = current.join(".makeitso");
+        if candidate.exists() && candidate.is_dir() {
+            return Some(current);
+        }
 
-      if !current.pop() {
-          break;
-      }
-  }
+        if !current.pop() {
+            break;
+        }
+    }
 
-  anyhow::bail!(
-      "🛑 Couldn't find a .makeitso/ directory in this or any parent folder.\n\
-       → Are you inside a Make It So project?\n\
-       → If not, run `mis init` in your project root."
-  )
+    // If we reach here, we didn't find the project root
+    // This might be totally expected depending on the context
+    None
 }

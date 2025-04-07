@@ -72,7 +72,8 @@ pub fn run_cmd(
 }
 
 fn validate_plugin_exists(plugin_name: &str) -> Result<PathBuf> {
-    let root = find_project_root()?;
+    let root = find_project_root()
+        .ok_or_else(|| anyhow::anyhow!("Failed to find project root"))?;
 
     if !root.exists() {
         anyhow::bail!(
