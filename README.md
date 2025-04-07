@@ -1,14 +1,38 @@
-# 🧙‍♂️ Make It So
+# Make It So
 
 **Make It So** is a CLI framework that lets you build your own project-specific CLI commands using TypeScript plugins powered by Deno.
 
 ## 🚀 Quickstart
 
 ```sh
-mis init
-mis create my-plugin
-mis run my-plugin:moo
+mis init                # <-- Init a .makeitso directory in your desired project
+mis create my-plugin    # <-- Create a new plugin via scaffolding
+mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plugin" 
 ```
+
+### First-time setup? No problem.
+
+When you run `mis init`, Make It So checks if Deno is installed. If not, you’ll be prompted:
+
+```
+Deno is not installed. Would you like to install it? [y/N]: y
+👇 Installing Deno...
+######################################################################## 100.0%
+Archive:  /Users/you/.deno/bin/deno.zip
+  inflating: /Users/you/.deno/bin/deno  
+Deno was installed successfully to /Users/you/.deno/bin/deno
+
+Deno was added to the PATH.
+You may need to restart your shell for it to become available.
+
+Set up completions?
+  [ ] bash (not recommended on macOS)
+> [ ] zsh
+```
+
+Make It So will handle downloading and installing Deno for you, so you’re ready to start building plugins right away.
+
+> ✅ You only need to do this once — future commands will just work.
 
 ## 🗂 What It Does
 

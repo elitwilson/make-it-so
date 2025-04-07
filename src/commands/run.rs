@@ -6,10 +6,7 @@ use std::{
 };
 
 use crate::{
-    config::{load_mis_config, plugins::load_plugin_manifest},
-    constants::PLUGIN_MANIFEST_FILE,
-    integrations::deno::cache_deno_dependencies,
-    models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root,
+    cli::prompt_user, config::{load_mis_config, plugins::load_plugin_manifest}, constants::PLUGIN_MANIFEST_FILE, integrations::deno::{cache_deno_dependencies, install_deno, is_deno_installed}, models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root
 };
 use anyhow::{Context, Result};
 
@@ -22,6 +19,16 @@ pub fn run_cmd(
     let plugin_path = validate_plugin_exists(&plugin_name)?;
     let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);    
     let plugin_manifest = load_plugin_manifest(&manifest_path)?;
+
+    if !is_deno_installed() {
+        let should_install = prompt_user("Deno is not installed. Would you like to install it?")?;
+        if !should_install {
+            anyhow::bail!("Deno is required to run plugins. Please install it and try again.");
+        }
+        
+        // Install Deno
+        install_deno()?; // or prompt/abort if you want confirmation
+    }    
 
     // let mut plugin_args = HashMap::new();
     let mut plugin_args: serde_json::Map<String, serde_json::Value> = plugin_raw_args

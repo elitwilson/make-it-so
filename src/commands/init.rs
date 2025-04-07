@@ -3,6 +3,8 @@ use std::{fs, os::unix::fs::PermissionsExt};
 
 use anyhow::Result;
 
+use crate::cli::prompt_user;
+use crate::integrations::deno::{install_deno, is_deno_installed};
 use crate::utils::find_project_root;
 
 // use crate::strategy::deploy::get_deploy_strategy;
@@ -41,6 +43,16 @@ fn make_executable(plugin_path: &PathBuf) -> Result<()> {
 }
 
 pub fn run_init(name: Option<&str>) -> Result<()> {
+    if !is_deno_installed() {
+        let should_install = prompt_user("Deno is not installed. Would you like to install it?")?;
+        if !should_install {
+            anyhow::bail!("Deno is required for Make It So. Please install it and try again.");
+        }
+        
+        // Install Deno
+        install_deno()?; // or prompt/abort if you want confirmation
+    }    
+
     if let Some(existing_root) = find_project_root() {
         anyhow::bail!(
             "🛑 Already inside a Make It So project (found at {}).\n\
