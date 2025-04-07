@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use toml::Value;
 use std::{collections::HashMap, process::Command};
 
 pub fn install_deno() -> Result<()> {

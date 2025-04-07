@@ -143,6 +143,3 @@ console.log("message:", ctx.config.message);
 ## ✨ That's It
 
 Build your own CLI commands for your project, powered by Deno + TypeScript, all wrapped in a slick developer workflow.
-
-> Make it powerful. Make it flexible. **Make It So.**
-

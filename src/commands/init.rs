@@ -34,14 +34,6 @@ foo = "bar"            # ← EXAMPLE of a project-scoped variable
     .to_string()
 }
 
-
-fn make_executable(plugin_path: &PathBuf) -> Result<()> {
-    let mut perms = fs::metadata(plugin_path)?.permissions();
-    perms.set_mode(0o755);
-    fs::set_permissions(plugin_path, perms)?;
-    Ok(())
-}
-
 pub fn run_init(name: Option<&str>) -> Result<()> {
     if !is_deno_installed() {
         let should_install = prompt_user("Deno is not installed. Would you like to install it?")?;
