@@ -87,7 +87,6 @@ description = "A plugin scaffolded by Make It So."
 [commands.moo]
 description = "Moo!!!!"
 script = "./{name}.ts"
-entrypoint = "moo"
 
 # 👇 These are any external dependencies your plugin needs
 [deno_dependencies]

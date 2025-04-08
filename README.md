@@ -90,11 +90,17 @@ description = "Moo!!!!"
 script = "./test-plugin.ts"
 entrypoint = "moo"
 
-[deno_dependencies]
+# ----- You can create your own commands like so: -- #
+[commands.bark]               # <-- Your new command
+description = "Bark!!!"       # <-- Help description for your new command
+script = "./bark-plugin.ts"   # <-- create a new .ts script for every command
+# -------------------------------------------------- #
+
+[deno_dependencies]           # <-- Shared dependencies available to all plugins
 cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 
-[user_config]
-message = "Moo It So 🪄"
+[user_config]                 # <-- User-customizable config variables
+message = "Moo It So 🪄"      # <-- Accessible via 'ctx' in your .ts file
 ```
 
 ### 🧩 Plugin Fields

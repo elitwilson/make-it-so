@@ -1,5 +1,4 @@
-use std::path::PathBuf;
-use std::{fs, os::unix::fs::PermissionsExt};
+use std::fs;
 
 use anyhow::Result;
 
@@ -11,14 +10,14 @@ use crate::utils::find_project_root;
 
 fn generate_mis_toml(name: Option<&str>) -> String {
     // If name is None, use the name of the current directory
-    let current_dir = std::env::current_dir()
-        .expect("Failed to get current directory");
-    let dir_name = current_dir
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or(".");
+    // let current_dir = std::env::current_dir()
+    //     .expect("Failed to get current directory");
+    // let dir_name = current_dir
+    //     .file_name()
+    //     .and_then(|s| s.to_str())
+    //     .unwrap_or(".");
 
-    let proj_name = name.unwrap_or_else(|| dir_name);
+    // let proj_name = name.unwrap_or_else(|| dir_name);
 
     format!(
         r#"
