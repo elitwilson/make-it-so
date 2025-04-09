@@ -49,10 +49,6 @@ You'll see:
                 ||     ||
 ```
 
-## 📄 Plugin Manifest (`plugin.toml`)
-
-Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes a `plugin.toml` file that describes what it does and how to run it.
-
 ### First-time setup? No problem.
 
 When you run `mis init`, Make It So checks if Deno is installed. If not, you’ll be prompted:
@@ -76,6 +72,10 @@ Set up completions?
 Make It So will handle downloading and installing Deno for you, so you’re ready to start building plugins right away.
 
 > ✅ You only need to do this once — future commands will just work.
+
+## 📄 Plugin Manifest (`plugin.toml`)
+
+Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes a `plugin.toml` file that describes what it does and how to run it.
 
 ### 🔧 Full Example
 
