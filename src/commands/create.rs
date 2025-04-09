@@ -34,7 +34,10 @@ pub fn create_plugin(name: &str) -> anyhow::Result<()> {
 
 fn scaffold_ts(name: &str) -> String {
     format!(
-        r#"// Import any external dependencies your plugin needs. Declare them in plugin.toml under [deno_dependencies].
+        r#"// Import any of the types you need. This one is declared automatically for you.
+import type {{ PluginContext }} from "./types.d.ts";
+        
+// Import any external dependencies your plugin needs. Declare them in plugin.toml under [deno_dependencies].
 // This one was declared automatically for you.
 import * as cow from "https://deno.land/x/cowsay@1.1/mod.ts";
 

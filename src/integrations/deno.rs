@@ -55,6 +55,7 @@ pub fn cache_deno_dependencies(deps: &HashMap<String, String>) -> Result<()> {
 
     let status = Command::new("deno")
         .arg("cache")
+        .arg("--no-lock")
         .args(deps.values())
         .status()
         .context("Failed to run `deno cache`")?;
