@@ -1,7 +1,7 @@
-//! Shipwreck CLI
+//! Make It So CLI
 //! Or: How I Learned to Stop Worrying and Wrap My Simple CI/CD Workflow In A Rust CLI Instead of a Makefile
 //!
-//! A silly, hilarious extravagance in personal CLI tooling that is delightfully excessive yet likely to reduce some pain in the long run.
+//! A silly, hilarious extravagance in personal CLI tooling that is delightfully excessive yet hopefully useful.
 //!
 
 mod cli;
@@ -17,8 +17,8 @@ use std::collections::HashMap;
 
 use anyhow::anyhow;
 use clap::Parser;
-use cli::{Cli, Commands};
-use commands::{create::create_plugin, init::run_init, run::run_cmd};
+use cli::{parse_cli_args, Cli, Commands};
+use commands::{create::create_plugin, init::run_init, run::run_cmd, add::add_plugin};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -48,6 +48,7 @@ fn main() -> anyhow::Result<()> {
             let mut parsed_args = HashMap::new();
             let mut iter = args.iter();
 
+            // ToDo: Refactor to use the parse_cli_args function
             while let Some(key) = iter.next() {
                 if key.starts_with("--") {
                     if let Some(value) = iter.next() {
@@ -63,6 +64,18 @@ fn main() -> anyhow::Result<()> {
 
         Commands::Create { name } => {
             create_plugin(&name)?;
+        }
+
+        Commands::Add {
+            args,
+            dry_run,
+        } => {
+            let parsed_args = parse_cli_args(&args);
+            for (k, v) in &parsed_args {
+                println!("{}: {}", k, v);
+            }
+
+            add_plugin(parsed_args, dry_run)?;
         }
     }
 

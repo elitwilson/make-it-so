@@ -9,13 +9,14 @@ pub struct MakeItSoConfig {
 
     #[serde(rename = "project_variables", default)]
     pub project_variables: HashMap<String, TomlValue>,
-    // #[serde(rename = "plugins")]
-    // pub plugins: Option<toml::Value>,
 
-    // pub environments: HashMap<String, EnvConfig>,
+    #[serde(default)]
+    pub registry: Option<RegistryConfig>,
+}
 
-    // #[serde(rename = "strategy_config")]
-    // pub strategy_config: Option<toml::Value>,
+#[derive(Debug, Deserialize)]
+pub struct RegistryConfig {
+    pub sources: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
