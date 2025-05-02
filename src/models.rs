@@ -1,7 +1,7 @@
 use toml::Value as TomlValue;
 use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, hash::Hash, path::PathBuf};
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct MakeItSoConfig {
@@ -38,8 +38,8 @@ pub struct ExecutionContext {
     pub meta: PluginMeta,
     pub dry_run: bool,
 
-    #[serde(skip_serializing)]
-    pub log: Option<()>, // ignored during serialization
+    // #[serde(skip_serializing)]
+    // pub log: Option<()>, // ignored during serialization
 }
 
 #[derive(Debug, Deserialize)]
@@ -94,7 +94,7 @@ impl ExecutionContext {
             project_root,
             meta,
             dry_run,
-            log: None,
+            // log: None,
         })
     }
 }

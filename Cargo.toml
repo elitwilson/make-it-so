@@ -1,6 +1,6 @@
 [package]
 name = "make-it-so"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "A fast CLI that runs TypeScript-powered plugins for your dev workflows."
 
@@ -9,12 +9,13 @@ name = "mis"
 path = "src/main.rs"
 
 [dependencies]
-clap = { version = "4.5.33", features = ["derive"] }
+clap = { version = "4.5.37", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "0.8.22"
 serde_yaml = "0.9"
 serde_json = "1.0"
-anyhow = "1.0"
+anyhow = "1.0.98"
+tempfile = "3.5"
 
 [dev-dependencies]
 tempfile = "3"

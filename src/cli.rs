@@ -39,11 +39,13 @@ pub enum Commands {
         name: String,
     },
     Add {
-        #[arg(trailing_var_arg = true, allow_hyphen_values=true)]
-        args: Vec<String>,
+        plugins: Vec<String>,
 
         #[arg(long)]
         dry_run: bool,
+
+        #[arg(long)]
+        registry: Option<String>,
     },    
 }
 

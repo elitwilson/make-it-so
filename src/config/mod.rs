@@ -24,5 +24,9 @@ pub fn load_mis_config() -> Result<(MakeItSoConfig, PathBuf, Value)> {
         .parse()
         .with_context(|| format!("Failed to parse TOML from: {}", config_path.display()))?;
 
+    // This is kind of dummy code because I don't want to get rid of a name property that is currently unused... Bad programming.
+    let n = &service_config.name;
+    println!("Loaded config for service: {}", n.as_deref().unwrap_or("unknown"));
+
     Ok((service_config, config_path, raw_config_value))
 }

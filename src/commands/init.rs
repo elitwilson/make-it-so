@@ -8,7 +8,7 @@ use crate::utils::find_project_root;
 
 // use crate::strategy::deploy::get_deploy_strategy;
 
-fn generate_mis_toml(name: Option<&str>) -> String {
+fn generate_mis_toml(_name: Option<&str>) -> String {
     // If name is None, use the name of the current directory
     // let current_dir = std::env::current_dir()
     //     .expect("Failed to get current directory");

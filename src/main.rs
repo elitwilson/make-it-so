@@ -13,11 +13,11 @@ mod integrations;
 mod models;
 mod utils;
 
-use std::collections::HashMap;
+use core::panic;
 
 use anyhow::anyhow;
 use clap::Parser;
-use cli::{parse_cli_args, Cli, Commands};
+use cli::{Cli, Commands};
 use commands::{create::create_plugin, init::run_init, run::run_cmd, add::add_plugin};
 
 fn main() -> anyhow::Result<()> {
@@ -45,18 +45,7 @@ fn main() -> anyhow::Result<()> {
 
             let plugin_name = parts[0].to_string();
 
-            let mut parsed_args = HashMap::new();
-            let mut iter = args.iter();
-
-            // ToDo: Refactor to use the parse_cli_args function
-            while let Some(key) = iter.next() {
-                if key.starts_with("--") {
-                    if let Some(value) = iter.next() {
-                        let key_clean = key.trim_start_matches("--").to_string();
-                        parsed_args.insert(key_clean, value.to_string());
-                    }
-                }
-            }
+            let parsed_args = cli::parse_cli_args(&args);
 
             // Run the command
             run_cmd(plugin_name, command_name, dry_run, parsed_args)?;
@@ -67,15 +56,11 @@ fn main() -> anyhow::Result<()> {
         }
 
         Commands::Add {
-            args,
+            plugins,
             dry_run,
+            registry,
         } => {
-            let parsed_args = parse_cli_args(&args);
-            for (k, v) in &parsed_args {
-                println!("{}: {}", k, v);
-            }
-
-            add_plugin(parsed_args, dry_run)?;
+            add_plugin(plugins, dry_run, registry)?;
         }
     }
 
