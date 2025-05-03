@@ -13,8 +13,6 @@ mod integrations;
 mod models;
 mod utils;
 
-use core::panic;
-
 use anyhow::anyhow;
 use clap::Parser;
 use cli::{Cli, Commands};
