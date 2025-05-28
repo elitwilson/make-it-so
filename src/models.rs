@@ -64,6 +64,42 @@ pub struct PluginMeta {
 #[derive(Debug, Deserialize)]
 pub struct PluginCommand {
     pub script: String,
+    
+    #[serde(default)]
+    pub description: Option<String>,
+    
+    #[serde(default)]
+    pub args: Option<CommandArgs>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CommandArgs {
+    #[serde(default)]
+    pub required: HashMap<String, ArgDefinition>,
+    
+    #[serde(default)]
+    pub optional: HashMap<String, ArgDefinition>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ArgDefinition {
+    pub description: String,
+    
+    #[serde(default)]
+    pub arg_type: ArgType,
+    
+    #[serde(default)]
+    pub default_value: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ArgType {
+    #[default]
+    String,
+    Boolean,
+    Integer,
+    Float,
 }
 
 impl ExecutionContext {

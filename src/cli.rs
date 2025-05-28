@@ -16,9 +16,11 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
+    /// Initialize this directory as a new .makeitso project
     Init {
         name: Option<String>,
     },
+    /// Execute a plugin command
     Run {
         /// The name of the plugin to run (e.g. api, worker)
         plugin: String,
@@ -34,10 +36,12 @@ pub enum Commands {
 
 
     },
+    /// Create a new plugin from template
     Create {
         #[arg(value_name = "plugin_name")]
         name: String,
     },
+    /// Install plugins from registries
     Add {
         plugins: Vec<String>,
 
@@ -49,7 +53,12 @@ pub enum Commands {
 
         #[arg(long)]
         force: bool,
-    },    
+    },
+    /// Show detailed help for a plugin command
+    Info {
+        /// Plugin and command to show information for (e.g. my-plugin:deploy)
+        plugin_command: String,
+    },
 }
 
 pub fn prompt_user(message: &str) -> anyhow::Result<bool> {

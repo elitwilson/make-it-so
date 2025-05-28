@@ -12,11 +12,12 @@ mod git_utils;
 mod integrations;
 mod models;
 mod utils;
+mod validation;
 
 use anyhow::anyhow;
 use clap::Parser;
 use cli::{Cli, Commands};
-use commands::{create::create_plugin, init::run_init, run::run_cmd, add::add_plugin};
+use commands::{create::create_plugin, init::run_init, run::run_cmd, add::add_plugin, help::show_help};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -60,6 +61,10 @@ fn main() -> anyhow::Result<()> {
             force,
         } => {
             add_plugin(plugins, dry_run, registry, force)?;
+        }
+
+        Commands::Info { plugin_command } => {
+            show_help(&plugin_command)?;
         }
     }
 

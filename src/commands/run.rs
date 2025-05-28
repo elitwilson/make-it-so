@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    cli::prompt_user, config::{load_mis_config, plugins::load_plugin_manifest}, constants::PLUGIN_MANIFEST_FILE, integrations::deno::{cache_deno_dependencies, install_deno, is_deno_installed}, models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root
+    cli::{prompt_user, parse_cli_args}, config::{load_mis_config, plugins::load_plugin_manifest}, constants::PLUGIN_MANIFEST_FILE, integrations::deno::{cache_deno_dependencies, install_deno, is_deno_installed}, models::{ExecutionContext, PluginManifest, PluginMeta}, utils::find_project_root, validation::validate_plugin_args
 };
 use anyhow::{Context, Result};
 
@@ -30,8 +30,38 @@ pub fn run_cmd(
         install_deno()?; // or prompt/abort if you want confirmation
     }    
 
-    // let mut plugin_args = HashMap::new();
-    let mut plugin_args: serde_json::Map<String, serde_json::Value> = plugin_raw_args
+    // Parse raw arguments first  
+    let raw_args: Vec<String> = plugin_raw_args.into_iter().map(|(k, v)| {
+        if v.is_empty() {
+            format!("--{}", k)
+        } else {
+            vec![format!("--{}", k), v].join(" ")
+        }
+    }).collect::<Vec<_>>().join(" ").split_whitespace().map(|s| s.to_string()).collect();
+    
+    let parsed_args = parse_cli_args(&raw_args);
+    
+    // Get the command definition for validation
+    let command = plugin_manifest
+        .commands
+        .get(command_name)
+        .with_context(|| {
+            format!(
+                "Command '{}' not found in plugin '{}'",
+                command_name, plugin_name
+            )
+        })?;
+
+    // Validate arguments against the plugin manifest
+    let validated_args = validate_plugin_args(
+        &parsed_args,
+        command.args.as_ref(),
+        &plugin_name,
+        command_name,
+    )?;
+
+    // Convert validated args to the format expected by ExecutionContext
+    let mut plugin_args: serde_json::Map<String, serde_json::Value> = validated_args
         .into_iter()
         .map(|(k, v)| {
             let value = match v.as_str() {
@@ -70,16 +100,6 @@ pub fn run_cmd(
         meta,
         dry_run,
     )?;
-
-    let command = plugin_manifest
-        .commands
-        .get(command_name)
-        .with_context(|| {
-            format!(
-                "Command '{}' not found in plugin '{}'",
-                command_name, plugin_name
-            )
-        })?;
 
     execute_plugin(&plugin_path, &command.script, &ctx, &plugin_manifest)?;
 
@@ -153,7 +173,7 @@ pub fn execute_plugin(
         .spawn()
         .with_context(|| format!("Failed to run plugin: {}", script_file_name))?;
 
-    // Pipe context JSON into plugin’s stdin
+    // Pipe context JSON into plugin's stdin
     child
         .stdin
         .as_mut()

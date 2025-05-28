@@ -1,0 +1,57 @@
+# Example Plugin Configuration with Argument Validation
+# This demonstrates the new argument validation features in Make It So CLI
+
+[plugin]
+name = "deployment-manager"
+version = "2.1.0"
+description = "Manages deployments with comprehensive argument validation"
+
+# Command with comprehensive argument validation
+[commands.deploy]
+description = "Deploy application to specified environment"
+script = "./deploy.ts"
+
+[commands.deploy.args.required]
+environment = { description = "Target environment (staging, production)", arg_type = "string" }
+version = { description = "Version to deploy", arg_type = "string" }
+
+[commands.deploy.args.optional]
+force = { description = "Force deployment without confirmation", arg_type = "boolean", default_value = "false" }
+replicas = { description = "Number of replicas to deploy", arg_type = "integer", default_value = "3" }
+timeout = { description = "Deployment timeout in seconds", arg_type = "float", default_value = "30.0" }
+config_file = { description = "Path to configuration file", arg_type = "string", default_value = "deploy.config.json" }
+
+# Command with only required arguments
+[commands.rollback]
+description = "Rollback to previous version"
+script = "./rollback.ts"
+
+[commands.rollback.args.required]
+environment = { description = "Environment to rollback", arg_type = "string" }
+target_version = { description = "Version to rollback to", arg_type = "string" }
+
+# Command with only optional arguments
+[commands.status]
+description = "Check deployment status"
+script = "./status.ts"
+
+[commands.status.args.optional]
+environment = { description = "Environment to check", arg_type = "string", default_value = "staging" }
+verbose = { description = "Show detailed status", arg_type = "boolean", default_value = "false" }
+format = { description = "Output format (json, table, yaml)", arg_type = "string", default_value = "table" }
+
+# Command with no arguments (backward compatibility)
+[commands.health]
+description = "Check system health"
+script = "./health.ts"
+
+# External dependencies
+[deno_dependencies]
+cliffy = "https://deno.land/x/cliffy@v1.0.0-rc.3/mod.ts"
+zod = "https://deno.land/x/zod@v3.22.4/mod.ts"
+
+# Plugin-specific configuration
+[user_config]
+default_environment = "staging"
+max_replicas = 10
+notification_webhook = "https://hooks.slack.com/services/..." 

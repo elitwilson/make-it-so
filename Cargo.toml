@@ -1,6 +1,6 @@
 [package]
 name = "make-it-so"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 description = "A fast CLI that runs TypeScript-powered plugins for your dev workflows."
 
