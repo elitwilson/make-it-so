@@ -3,7 +3,7 @@ use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct MakeItSoConfig {
     pub name: Option<String>,
 
@@ -14,7 +14,7 @@ pub struct MakeItSoConfig {
     pub registry: Option<RegistryConfig>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct RegistryConfig {
     pub sources: Vec<String>,
 }

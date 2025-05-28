@@ -1,0 +1,10 @@
+[env]
+RUST_TEST_THREADS = "1"
+
+[alias]
+test-serial = "test -- --test-threads=1" # This is necessary to avoid race conditions in the tests due to the use of the tempdir crate
+test-parallel = "test"
+
+# Make serial testing the default when using 'cargo test'
+# Uncomment the line below if you want this to be the absolute default
+# test = "test -- --test-threads=1" 

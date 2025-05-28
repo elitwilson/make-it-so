@@ -57,8 +57,9 @@ fn main() -> anyhow::Result<()> {
             plugins,
             dry_run,
             registry,
+            force,
         } => {
-            add_plugin(plugins, dry_run, registry)?;
+            add_plugin(plugins, dry_run, registry, force)?;
         }
     }
 

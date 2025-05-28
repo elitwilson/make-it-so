@@ -46,6 +46,9 @@ pub enum Commands {
 
         #[arg(long)]
         registry: Option<String>,
+
+        #[arg(long)]
+        force: bool,
     },    
 }
 
