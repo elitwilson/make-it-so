@@ -22,10 +22,9 @@ pub fn create_plugin(name: &str) -> anyhow::Result<()> {
 
     fs::create_dir_all(&plugin_dir)?;
 
-    // Write scaffold files
+    // Write scaffold files - no longer creating local types.d.ts since we use shared files
     fs::write(plugin_dir.join(format!("{}.ts", name)), scaffold_ts(name))?;
     fs::write(plugin_dir.join("plugin.toml"), scaffold_toml(name))?;
-    fs::write(plugin_dir.join("types.d.ts"), scaffold_types())?;
 
     println!("✅ Created plugin '{}'", name);
 
@@ -34,44 +33,43 @@ pub fn create_plugin(name: &str) -> anyhow::Result<()> {
 
 fn scaffold_ts(name: &str) -> String {
     format!(
-        r#"// Import any of the types you need. This one is declared automatically for you.
-import type {{ PluginContext }} from "./types.d.ts";
+        r#"// Import shared types and utilities from Make It So
+import type {{ PluginContext }} from "../mis-types.d.ts";
+import {{ loadContext, outputSuccess, outputError }} from "../mis-plugin-api.ts";
         
 // Import any external dependencies your plugin needs. Declare them in plugin.toml under [deno_dependencies].
 // This one was declared automatically for you.
 import * as cow from "https://deno.land/x/cowsay@1.1/mod.ts";
 
-// Read plugin context from stdin (injected by Make It So CLI)
-const decoder = new TextDecoder("utf-8");
-
 // 👇 This is the entrypoint of your plugin script.
 // The Make It So CLI pipes JSON into stdin when it runs your plugin.
-Deno.stdin.readable
-  .pipeThrough(new TextDecoderStream())
-  .getReader()
-  .read()
-  .then(({{ value }}) => {{
-    const data = value || "";
+try {{
+  // Load context using the shared utility
+  const ctx: PluginContext = await loadContext();
 
-    // 👇 This is the runtime context injected by the CLI
-    const ctx = JSON.parse(data) as PluginContext;
+  // Optional: inspect the context structure
+  console.log(ctx);
 
-    // Optional: inspect the context structure
-    console.log(ctx);
+  // Respect the dry run flag from the CLI
+  if (ctx.dry_run) {{
+    console.log("🚫 Dry run: skipping execution.");
+    return;
+  }}
 
-    // Respect the dry run flag from the CLI
-    if (ctx.dry_run) {{
-      console.log("🚫 Dry run: skipping execution.");
-      return;
-    }}
+  // Access your custom config from plugin.toml under [user_config]
+  const message = String(ctx.config.message ?? "Hello from {name} 🪄");
 
-    // Access your custom config from plugin.toml under [user_config]
-    const message = String(ctx.config.message ?? "Hello from {name} 🪄");
+  // Do your thing — in this case, print a talking cow 🐮
+  console.log("Hello from {name}!")
+  console.log(cow.say({{ text: message }}));
 
-    // Do your thing — in this case, print a talking cow 🐮
-    console.log("Hello from {name}!")
-    console.log(cow.say({{ text: message }}));
-    }});
+  // Output success result using shared utility
+  outputSuccess({{ message: "Plugin executed successfully!" }});
+
+}} catch (error) {{
+  // Output error result using shared utility
+  outputError(error instanceof Error ? error.message : String(error));
+}}
 "#,
         name = name
     )
@@ -104,23 +102,4 @@ message = "Moo It So 🪄"
 "#,
     name = name
     )
-}
-
-
-fn scaffold_types() -> &'static str {
-    r#"export type PluginContext = {
-  plugin_args: Record<string, string | boolean>;
-  config: Record<string, unknown>;
-  project_root: string;
-  env: Record<string, string>;
-  meta: {
-    plugin_name: string;
-    plugin_description: string;
-    plugin_version: string;
-    cli_version: string;
-  };
-  dry_run: boolean;
-  log: (msg: string) => void;
-};
-"#
 }

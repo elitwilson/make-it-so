@@ -33,6 +33,10 @@ foo = "bar"            # ← EXAMPLE of a project-scoped variable
     .to_string()
 }
 
+// Template files that will be copied to .makeitso/
+const MIS_TYPES_TEMPLATE: &str = include_str!("../../templates/mis-types.d.ts");
+const MIS_UTILS_TEMPLATE: &str = include_str!("../../templates/mis-plugin-api.ts");
+
 pub fn run_init(name: Option<&str>) -> Result<()> {
     if !is_deno_installed() {
         let should_install = prompt_user("Deno is not installed. Would you like to install it?")?;
@@ -68,6 +72,24 @@ pub fn run_init(name: Option<&str>) -> Result<()> {
         println!("📝 Created config file: {}", config_path.display());
     } else {
         println!("⚠️  Config already exists: {}", config_path.display());
+    }
+
+    // Copy TypeScript template files to .makeitso/
+    let types_path = makeitso_dir.join("mis-types.d.ts");
+    let utils_path = makeitso_dir.join("mis-plugin-api.ts");
+
+    if !types_path.exists() {
+        fs::write(&types_path, MIS_TYPES_TEMPLATE)?;
+        println!("📝 Created TypeScript types: {}", types_path.display());
+    } else {
+        println!("⚠️  TypeScript types already exist: {}", types_path.display());
+    }
+
+    if !utils_path.exists() {
+        fs::write(&utils_path, MIS_UTILS_TEMPLATE)?;
+        println!("📝 Created TypeScript utilities: {}", utils_path.display());
+    } else {
+        println!("⚠️  TypeScript utilities already exist: {}", utils_path.display());
     }
 
     // scaffold_plugin_if_needed(&strategy)?;

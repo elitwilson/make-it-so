@@ -118,3 +118,30 @@ It is not required today, but it unlocks:
 Let’s keep plugins composable, introspectable, and clean.
 
 🧠 Future You will thank you.
+
+
+✅ Context Accumulation - Like Go's http.Context!
+This is a much more powerful and flexible architecture:
+Key Benefits:
+📚 Full History Access: Each plugin can see ALL previous plugin results, not just the immediate predecessor
+🔍 Selective Data Access: Plugins can find specific results by plugin name:
+Apply to mis-utils.ts
+;
+🕐 Timestamps: Each result includes when it was executed for debugging/auditing
+💡 Complex Workflows: Later plugins can combine data from multiple earlier plugins
+🧠 Rich Context: The context grows richer as it flows through the pipeline
+Data Flow Example:
+Apply to mis-utils.ts
+}
+Advanced Workflow Patterns Now Possible:
+Multi-step validation: Later plugins can validate against multiple earlier results
+Conditional logic: Plugins can branch based on what previous plugins did
+Data aggregation: Final plugins can summarize all previous operations
+Error recovery: Plugins can see which earlier steps failed and why
+Audit trails: Complete record of what happened and when
+Developer Experience:
+✅ Simple: Plugins just access ctx.results to see previous work
+✅ Type-safe: Full TypeScript support with proper types
+✅ Discoverable: Easy to find results by plugin name
+✅ Rich: Includes success/error state, data, and timestamps
+This is a much more sophisticated and powerful composition system than simple linear data passing! It enables complex workflow orchestration while keeping individual plugins simple and focused. Brilliant idea! 🎯
