@@ -12,21 +12,62 @@ mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plu
 
 ## 🗂 What It Does
 
-- Creates a `.makeitso/` folder in your current directory.
+- Creates a `.makeitso/` folder in your current directory with TypeScript API files.
 - Lets you define your own CLI commands with scaffolded TypeScript plugins.
 - Each plugin runs in Deno and can define its own dependencies and config.
+- Provides rich TypeScript types and utilities for plugin development.
+- Supports plugin composition for building complex workflows.
 - Keeps everything project-local — no global installs or `node_modules` clutter.
 
 ## 🧱 Plugin Workflow
 
 1. `mis init`  
-   Creates `.makeitso/` and a `mis.toml` config.
+   Creates `.makeitso/` with config file and TypeScript API files for plugin development.
 
 2. `mis create my-plugin`  
-   Scaffolds a plugin inside `.makeitso/plugins/my-plugin`.
+   Scaffolds a plugin inside `.makeitso/plugins/my-plugin` with proper TypeScript imports.
 
 3. `mis run my-plugin:your-command`  
    Runs a specific command defined by your plugin.
+
+## 🧑‍💻 TypeScript Development Experience
+
+When you run `mis init`, Make It So creates TypeScript API files in your `.makeitso/` directory:
+
+```
+.makeitso/
+├── mis.toml              # Project configuration
+├── plugin-types.d.ts     # TypeScript type definitions
+└── plugin-api.ts         # Utilities for plugin development
+```
+
+Your plugins automatically get:
+- **Full TypeScript support** with proper type definitions
+- **Rich context object** with plugin args, config, and project variables
+- **Utility functions** for common operations (loading context, outputting results)
+- **Plugin composition utilities** for building complex workflows
+
+### Plugin Template Structure
+
+Generated plugins use the shared API:
+
+```ts
+// Import shared types and utilities from Make It So
+import type { PluginContext } from "../plugin-types.d.ts";
+import { loadContext, outputSuccess, outputError } from "../plugin-api.ts";
+
+try {
+  // Load context using the shared utility
+  const ctx: PluginContext = await loadContext();
+  
+  // Your plugin logic here...
+  
+  // Output success result
+  outputSuccess({ message: "Plugin executed successfully!" });
+} catch (error) {
+  outputError(error instanceof Error ? error.message : String(error));
+}
+```
 
 ## 🐄 Example Command
 
@@ -40,7 +81,7 @@ You'll see:
 
 ```
  ____________
-< Moo It So 🪄 >
+< Make It So 🪄 >
  ------------
         \   ^__^
          \  (oo)\_______
@@ -51,7 +92,7 @@ You'll see:
 
 ### First-time setup? No problem.
 
-When you run `mis init`, Make It So checks if Deno is installed. If not, you’ll be prompted:
+When you run `mis init`, Make It So checks if Deno is installed. If not, you'll be prompted:
 
 ```
 Deno is not installed. Would you like to install it? [y/N]: y
@@ -69,9 +110,32 @@ Set up completions?
 > [ ] zsh
 ```
 
-Make It So will handle downloading and installing Deno for you, so you’re ready to start building plugins right away.
+Make It So will handle downloading and installing Deno for you, so you're ready to start building plugins right away.
 
 > ✅ You only need to do this once — future commands will just work.
+
+## 🔗 Plugin Composition
+
+The TypeScript API includes powerful utilities for building complex workflows by composing multiple plugins:
+
+```ts
+import { composePlugins, runPluginSafe } from "../plugin-api.ts";
+
+// Simple composition - pass data between plugins
+const result = await composePlugins([
+  {
+    plugin: "validate-input",
+    args: { file: "package.json" }
+  },
+  {
+    plugin: "process-data", 
+    args: (prevResult) => ({ data: prevResult.processedData })
+  }
+]);
+
+// Or use individual plugin calls
+const validationResult = await runPluginSafe("validate-semver", { version: "1.2.3" });
+```
 
 ## 📄 Plugin Manifest (`plugin.toml`)
 
@@ -88,7 +152,6 @@ description = "A plugin scaffolded by Make It So."
 [commands.moo]
 description = "Moo!!!!"
 script = "./test-plugin.ts"
-entrypoint = "moo"
 
 # ----- You can create your own commands like so: -- #
 [commands.bark]               # <-- Your new command
@@ -100,7 +163,7 @@ script = "./bark-plugin.ts"   # <-- create a new .ts script for every command
 cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 
 [user_config]                 # <-- User-customizable config variables
-message = "Moo It So 🪄"      # <-- Accessible via 'ctx' in your .ts file
+message = "Moo It So 🪄"      # <-- Accessible via 'ctx.config' in your .ts file
 ```
 
 ### 🧩 Plugin Fields
@@ -119,7 +182,6 @@ Define commands under `[commands.<command-name>]`:
 |---------------|--------|--------------------------------------------|
 | `description` | string | Description shown in help output           |
 | `script`      | string | Path to the `.ts` script to run            |
-| `entrypoint`  | string | The exported function to call from script  |
 
 ### 📦 Dependencies
 
@@ -141,14 +203,29 @@ import { say } from "cowsay";
 Under `[user_config]`, you can define any config your plugin script needs. It's available via `ctx.config` in TypeScript:
 
 ```ts
+// Access plugin config
 console.log("message:", ctx.config.message);
+
+// Access plugin arguments
+console.log("args:", ctx.plugin_args);
+
+// Access project variables
+console.log("project vars:", ctx.project_variables);
 ```
+
+---
+
+## 🛠 Available Commands
+
+| Command | Description | Status |
+|---------|-------------|--------|
+| `mis init` | Initialize a new Make It So project | ✅ Ready |
+| `mis create <plugin>` | Create a new plugin | ✅ Ready |
+| `mis run <plugin:command>` | Run a plugin command | ✅ Ready |
+| `mis add <plugin>` | Install plugins from registry | 🚧 WIP |
 
 ---
 
 ## ✨ That's It
 
-Build your own CLI commands for your project, powered by Deno + TypeScript, all wrapped in a slick developer workflow.
-
-## Coming Soon:
-- Typescript dev environment setup instructions
+Build your own CLI commands for your project, powered by Deno + TypeScript, all wrapped in a slick developer workflow with full TypeScript support and plugin composition capabilities.
