@@ -5,12 +5,11 @@
  * to interface with the plugin runtime.
  *
  * Any changes to this file may break plugin functionality.
- * To update it, re-run `mis init` or upgrade your CLI version.
  */
 
 import { PluginContext, PluginResult } from "./mis-types.d.ts";
 
-export async function loadContext(): Promise<PluginContext> {
+async function loadContext(): Promise<PluginContext> {
   const reader = Deno.stdin.readable
     .pipeThrough(new TextDecoderStream())
     .getReader();
@@ -19,7 +18,7 @@ export async function loadContext(): Promise<PluginContext> {
 }
 
 
-export async function runPlugin<T = unknown>(
+async function runPlugin<T = unknown>(
   command: string,
   args: Record<string, unknown> = {},
   options: { debug?: boolean } = {}
@@ -75,7 +74,7 @@ export async function runPlugin<T = unknown>(
  * Runs a plugin and automatically handles errors by outputting JSON and exiting.
  * Perfect for composition plugins - no error handling boilerplate needed.
  */
-export async function runPluginSafe<T = unknown>(
+async function runPluginSafe<T = unknown>(
   command: string,
   args: Record<string, unknown> = {},
   options: { debug?: boolean } = {}
@@ -105,7 +104,7 @@ export async function runPluginSafe<T = unknown>(
  * Composes multiple plugins in sequence, passing data between them.
  * Super simple way to build composition plugins.
  */
-export async function composePlugins<T = unknown>(
+async function composePlugins<T = unknown>(
   steps: Array<{
     plugin: string;
     args?: Record<string, unknown> | ((previousResult: unknown) => Record<string, unknown>);
@@ -147,7 +146,7 @@ export async function composePlugins<T = unknown>(
  * Each plugin receives the enriched context with all previous results.
  * Perfect for complex workflows where later plugins need earlier results.
  */
-export async function composePluginsWithContext(
+async function composePluginsWithContext(
   context: PluginContext, // Always the CLI context - predictable and explicit
   steps: Array<{
     plugin: string;
@@ -239,14 +238,14 @@ export async function composePluginsWithContext(
   return enrichedContext;
 }
 
-export function assertRequiredArgs(_args: Record<string, unknown>, _requiredArgs: string[]) {
+function assertRequiredArgs(_args: Record<string, unknown>, _requiredArgs: string[]) {
   // TODO: Implement argument validation
 }
 
 /**
  * Default plugin path resolver - can be overridden for custom plugin layouts
  */
-export function defaultPluginResolver(pluginName: string, projectRoot: string): string {
+function defaultPluginResolver(pluginName: string, projectRoot: string): string {
   return `${projectRoot}/.makeitso/plugins/${pluginName.replace(':', '/')}.ts`;
 }
 
@@ -254,7 +253,7 @@ export function defaultPluginResolver(pluginName: string, projectRoot: string): 
  * Extract the last valid JSON object from mixed output.
  * Handles cases where plugins output debug info followed by result JSON.
  */
-export function extractFinalJson(output: string): unknown {
+function extractFinalJson(output: string): unknown {
   const lines = output.trim().split('\n');
   
   // Try to find the last complete JSON object
@@ -292,7 +291,7 @@ export function extractFinalJson(output: string): unknown {
  * Output a successful plugin result and exit.
  * Makes plugin development braindead simple - no JSON boilerplate needed!
  */
-export function outputSuccess(data: Record<string, unknown>, context?: PluginContext): never {
+function outputSuccess(data: Record<string, unknown>, context?: PluginContext): never {
   console.log(JSON.stringify({
     success: true,
     data,
@@ -305,11 +304,25 @@ export function outputSuccess(data: Record<string, unknown>, context?: PluginCon
  * Output an error plugin result and exit.
  * Makes error handling braindead simple - no JSON boilerplate needed!
  */
-export function outputError(error: string, context?: PluginContext): never {
+function outputError(error: string, context?: PluginContext): never {
   console.log(JSON.stringify({
     success: false,
     error,
     ...(context ? { context } : {})
   }, null, 2));
   Deno.exit(1);
+}
+
+// export a mis object with all of the above api functions
+export const mis = {
+  loadContext,
+  runPlugin,
+  runPluginSafe,
+  composePlugins,
+  composePluginsWithContext,
+  assertRequiredArgs,
+  defaultPluginResolver,
+  extractFinalJson,
+  outputSuccess,
+  outputError,
 }

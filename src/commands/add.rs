@@ -65,16 +65,28 @@ pub fn add_plugin_with_config(
         // FIXED: Install from first matching registry only (Priority 1 issue #2)
         let mut installed = false;
         for (url, temp_dir) in &cloned_repos {
-            let plugin_path = temp_dir.path().join(plugin_name);
-            if plugin_path.exists() && plugin_path.is_dir() {
-                if dry_run {
-                    println!("📝 Would install plugin '{}' from {}", plugin_name, url);
-                } else {
-                    install_plugin_from_clone_with_force(plugin_name, temp_dir, url, force)?;
-                }
-                installed = true;
-                break; // Only install from first matching registry
+            // Check both root level and plugins subdirectory
+            let root_plugin_path = temp_dir.path().join(plugin_name);
+            let plugins_subdir_path = temp_dir.path().join("plugins").join(plugin_name);
+            
+            let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
+                // Plugin is in plugins/ subdirectory
+                plugins_subdir_path
+            } else if root_plugin_path.exists() && root_plugin_path.is_dir() {
+                // Plugin is at root level
+                root_plugin_path
+            } else {
+                // Plugin not found in this registry
+                continue;
+            };
+            
+            if dry_run {
+                println!("📝 Would install plugin '{}' from {}", plugin_name, url);
+            } else {
+                install_plugin_from_path(plugin_name, &source_path, url, force)?;
             }
+            installed = true;
+            break; // Only install from first matching registry
         }
 
         if !installed && !dry_run {
@@ -92,8 +104,17 @@ fn plugin_exists_in_project(name: &String) -> bool {
 
 fn plugin_exists_in_registries(plugin_name: &str, cloned: &HashMap<String, TempDir>) -> bool {
     for (_registry_url, temp_dir) in cloned {
-        let plugin_path = temp_dir.path().join(plugin_name);
-        if plugin_path.exists() && plugin_path.is_dir() {
+        // Check both root level and inside 'plugins' subdirectory
+        let root_plugin_path = temp_dir.path().join(plugin_name);
+        let plugins_subdir_path = temp_dir.path().join("plugins").join(plugin_name);
+        
+        // Check if plugin exists in plugins subdirectory first (more common)
+        if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
+            return true;
+        }
+        
+        // Fallback: check root level for backward compatibility
+        if root_plugin_path.exists() && root_plugin_path.is_dir() {
             return true;
         }
     }
@@ -118,77 +139,17 @@ fn temp_clone_repositories(registries: &[String]) -> Result<HashMap<String, Temp
     Ok(registry_map)
 }
 
-pub fn install_plugin_from_clone(
+pub fn install_plugin_from_path(
     plugin_name: &str,
-    source_tempdir: &TempDir,
-    registry_url: &str,
-) -> Result<()> {
-    let source_path = source_tempdir.path().join(plugin_name);
-    if !source_path.exists() || !source_path.is_dir() {
-        return Err(anyhow!(
-            "Plugin '{}' not found in registry clone at {}",
-            plugin_name,
-            registry_url
-        ));
-    }
-
-    let dest_root = Path::new(".makeitso/plugins");
-    let dest_path = dest_root.join(plugin_name);
-
-    // Ensure the destination parent dir exists
-    fs::create_dir_all(dest_root)?;
-
-    // Check if plugin already exists
-    if dest_path.exists() {
-        return Err(anyhow!(
-            "Plugin '{}' already exists in your project. Use --force to overwrite.",
-            plugin_name
-        ));
-    }
-
-    // Copy directory
-    copy_dir_recursive(&source_path, &dest_path)?;
-
-    println!(
-        "✅ Installed plugin '{}' from {} → {}",
-        plugin_name,
-        registry_url,
-        dest_path.display()
-    );
-
-    Ok(())
-}
-
-fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
-    fs::create_dir_all(dst)?;
-
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let entry_path = entry.path();
-        let target_path = dst.join(entry.file_name());
-
-        if entry_path.is_dir() {
-            copy_dir_recursive(&entry_path, &target_path)?;
-        } else {
-            fs::copy(&entry_path, &target_path)?;
-        }
-    }
-
-    Ok(())
-}
-
-pub fn install_plugin_from_clone_with_force(
-    plugin_name: &str,
-    source_tempdir: &TempDir,
+    source_path: &Path,
     registry_url: &str,
     force: bool,
 ) -> Result<()> {
-    let source_path = source_tempdir.path().join(plugin_name);
     if !source_path.exists() || !source_path.is_dir() {
         return Err(anyhow!(
-            "Plugin '{}' not found in registry clone at {}",
+            "Plugin '{}' not found at path {}",
             plugin_name,
-            registry_url
+            source_path.display()
         ));
     }
 
@@ -222,6 +183,73 @@ pub fn install_plugin_from_clone_with_force(
     );
 
     Ok(())
+}
+
+pub fn install_plugin_from_clone(
+    plugin_name: &str,
+    source_tempdir: &TempDir,
+    registry_url: &str,
+) -> Result<()> {
+    // Check both root level and plugins subdirectory
+    let root_plugin_path = source_tempdir.path().join(plugin_name);
+    let plugins_subdir_path = source_tempdir.path().join("plugins").join(plugin_name);
+    
+    let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
+        plugins_subdir_path
+    } else if root_plugin_path.exists() && root_plugin_path.is_dir() {
+        root_plugin_path
+    } else {
+        return Err(anyhow!(
+            "Plugin '{}' not found in registry clone at {}",
+            plugin_name,
+            registry_url
+        ));
+    };
+
+    install_plugin_from_path(plugin_name, &source_path, registry_url, false)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    fs::create_dir_all(dst)?;
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = dst.join(entry.file_name());
+
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn install_plugin_from_clone_with_force(
+    plugin_name: &str,
+    source_tempdir: &TempDir,
+    registry_url: &str,
+    force: bool,
+) -> Result<()> {
+    // Check both root level and plugins subdirectory
+    let root_plugin_path = source_tempdir.path().join(plugin_name);
+    let plugins_subdir_path = source_tempdir.path().join("plugins").join(plugin_name);
+    
+    let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
+        plugins_subdir_path
+    } else if root_plugin_path.exists() && root_plugin_path.is_dir() {
+        root_plugin_path
+    } else {
+        return Err(anyhow!(
+            "Plugin '{}' not found in registry clone at {}",
+            plugin_name,
+            registry_url
+        ));
+    };
+
+    install_plugin_from_path(plugin_name, &source_path, registry_url, force)
 }
 
 #[cfg(test)]
