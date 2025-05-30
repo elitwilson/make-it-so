@@ -1,7 +1,7 @@
 // Import shared types and utilities from Make It So
 import type { PluginContext } from "../../mis-types.d.ts";
 import { mis } from "../../mis-plugin-api.ts";
-        
+
 // Import any external dependencies your plugin needs. Declare them in plugin.toml under [deno_dependencies].
 // This one was declared automatically for you.
 import * as cow from "https://deno.land/x/cowsay@1.1/mod.ts";
@@ -21,8 +21,14 @@ try {
     Deno.exit(0);
   }
 
-  // Access your custom config from plugin.toml under [user_config]
-  const message = String(ctx.config.message ?? "Hello from examples 🪄");
+  // Access your custom plugin.toml config via the ctx.config object
+  // Your config data is passed as a JSON object.
+  let message = String(ctx.config.message ?? "Hello from examples 🪄");
+
+  // If the user passed a message via CLI, args use it
+  if (ctx.plugin_args["message"]) { // < - This is pulled from plugin.toml
+    message = ctx.plugin_args["message"];
+  }
 
   // Do your thing — in this case, print a talking cow 🐮
   console.log("Hello from examples!")

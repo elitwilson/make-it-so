@@ -1,0 +1,21 @@
+{
+    // Rust-specific settings
+    "rust-analyzer.cargo.loadOutDirsFromCheck": true,
+    "rust-analyzer.procMacro.enable": true,
+    "rust-analyzer.cargo.runBuildScripts": true,
+    
+    // Test configuration
+    "rust-analyzer.runnables.cargoExtraArgs": ["--release"],
+    "rust-analyzer.lens.enable": true,
+    "rust-analyzer.lens.run": true,
+    "rust-analyzer.lens.debug": true,
+    
+    // Editor improvements
+    "editor.formatOnSave": true,
+    "editor.inlayHints.enabled": "on",
+    
+    // File associations
+    "files.associations": {
+        "*.toml": "toml"
+    }
+} 

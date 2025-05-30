@@ -40,6 +40,59 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug unit tests",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--lib"
+        ],
+        "filter": {
+          "name": "make-it-so",
+          "kind": "lib"
+        }
+      },
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch", 
+      "name": "Debug add.rs tests",
+      "cargo": {
+        "args": [
+          "test",
+          "--no-run",
+          "--"
+        ],
+        "filter": {
+          "name": "make-it-so",
+          "kind": "bin"
+        }
+      },
+      "args": ["add"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug executable 'mis'",
+      "cargo": {
+        "args": [
+          "build",
+          "--bin=mis"
+        ],
+        "filter": {
+          "name": "mis",
+          "kind": "bin"
+        }
+      },
+      "args": ["--help"],
+      "cwd": "${workspaceFolder}"
     }
   ]
 }

@@ -30,12 +30,12 @@ export type PluginContext = {
 
 export type PluginResult =
   | {
-      success: true;
-      data: Record<string, unknown>; // actual payload returned by the plugin
-      context?: PluginContext; // passthrough context for composition
-    }
+    success: true;
+    data: Record<string, unknown>; // actual payload returned by the plugin
+    context?: PluginContext; // passthrough context for composition
+  }
   | {
-      success: false;
-      error: string; // human-readable message
-      context?: PluginContext; // passthrough context even on failure
-    };
+    success: false;
+    error: string; // human-readable message
+    context?: PluginContext; // passthrough context even on failure
+  };

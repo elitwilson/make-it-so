@@ -1,7 +1,7 @@
-use toml::Value as TomlValue;
-use serde_json::Value as JsonValue;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use toml::Value as TomlValue;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MakeItSoConfig {
@@ -32,12 +32,11 @@ pub struct EnvConfig {
 #[derive(Serialize)]
 pub struct ExecutionContext {
     pub plugin_args: HashMap<String, TomlValue>,
-    pub config: JsonValue, // <-- plugin-specific config
+    pub config: JsonValue,            // <-- plugin-specific config
     pub project_variables: JsonValue, // <-- project-scoped variables
     pub project_root: String,
     pub meta: PluginMeta,
     pub dry_run: bool,
-
     // #[serde(skip_serializing)]
     // pub log: Option<()>, // ignored during serialization
 }
@@ -64,10 +63,13 @@ pub struct PluginMeta {
 #[derive(Debug, Deserialize)]
 pub struct PluginCommand {
     pub script: String,
-    
+
     #[serde(default)]
     pub description: Option<String>,
-    
+
+    #[serde(default)]
+    pub instructions: Option<String>,
+
     #[serde(default)]
     pub args: Option<CommandArgs>,
 }
@@ -76,7 +78,7 @@ pub struct PluginCommand {
 pub struct CommandArgs {
     #[serde(default)]
     pub required: HashMap<String, ArgDefinition>,
-    
+
     #[serde(default)]
     pub optional: HashMap<String, ArgDefinition>,
 }
@@ -84,10 +86,10 @@ pub struct CommandArgs {
 #[derive(Debug, Deserialize)]
 pub struct ArgDefinition {
     pub description: String,
-    
+
     #[serde(default)]
     pub arg_type: ArgType,
-    
+
     #[serde(default)]
     pub default_value: Option<String>,
 }
@@ -112,8 +114,8 @@ impl ExecutionContext {
         dry_run: bool,
     ) -> anyhow::Result<Self> {
         // 1) plugin config (TOML) → JSON
-        let plugin_toml = plugin_user_config
-            .unwrap_or_else(|| TomlValue::Table(toml::map::Map::new()));
+        let plugin_toml =
+            plugin_user_config.unwrap_or_else(|| TomlValue::Table(toml::map::Map::new()));
         let plugin_config_json: JsonValue = toml_to_json(plugin_toml);
 
         // 2) project vars (flat map) → TOML table → JSON
@@ -134,8 +136,6 @@ impl ExecutionContext {
         })
     }
 }
-
-
 
 // ToDo: Move this to a utility module
 fn toml_to_json(val: TomlValue) -> JsonValue {

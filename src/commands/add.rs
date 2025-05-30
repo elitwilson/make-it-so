@@ -185,6 +185,17 @@ pub fn install_plugin_from_path(
     Ok(())
 }
 
+/// Installs a plugin from a cloned repository (TempDir) without force.
+/// 
+/// This is a convenience wrapper around `install_plugin_from_path` that handles
+/// the plugin discovery logic (checking both root and plugins/ subdirectory).
+/// 
+/// Used primarily by:
+/// - Unit tests for isolated plugin installation testing
+/// - Legacy/external code that works with TempDir objects
+/// 
+/// For new code, prefer `install_plugin_from_path` for direct path operations
+/// or `add_plugin` for the full CLI workflow.
 pub fn install_plugin_from_clone(
     plugin_name: &str,
     source_tempdir: &TempDir,
@@ -209,24 +220,18 @@ pub fn install_plugin_from_clone(
     install_plugin_from_path(plugin_name, &source_path, registry_url, false)
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
-    fs::create_dir_all(dst)?;
-
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let entry_path = entry.path();
-        let target_path = dst.join(entry.file_name());
-
-        if entry_path.is_dir() {
-            copy_dir_recursive(&entry_path, &target_path)?;
-        } else {
-            fs::copy(&entry_path, &target_path)?;
-        }
-    }
-
-    Ok(())
-}
-
+/// Installs a plugin from a cloned repository (TempDir) with optional force.
+/// 
+/// This is a convenience wrapper around `install_plugin_from_path` that handles
+/// the plugin discovery logic (checking both root and plugins/ subdirectory)
+/// and provides force overwrite capability.
+/// 
+/// Used primarily by:
+/// - Unit tests that need to test force overwrite behavior
+/// - The main add_plugin workflow for actual installations
+/// - Legacy/external code that works with TempDir objects
+/// 
+/// The force parameter controls whether existing plugins are overwritten.
 pub fn install_plugin_from_clone_with_force(
     plugin_name: &str,
     source_tempdir: &TempDir,
@@ -250,6 +255,24 @@ pub fn install_plugin_from_clone_with_force(
     };
 
     install_plugin_from_path(plugin_name, &source_path, registry_url, force)
+}
+
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<()> {
+    fs::create_dir_all(dst)?;
+
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let entry_path = entry.path();
+        let target_path = dst.join(entry.file_name());
+
+        if entry_path.is_dir() {
+            copy_dir_recursive(&entry_path, &target_path)?;
+        } else {
+            fs::copy(&entry_path, &target_path)?;
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

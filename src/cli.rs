@@ -1,5 +1,8 @@
-use std::{collections::HashMap, io::{self, Write}};
 use clap::{Parser, Subcommand};
+use std::{
+    collections::HashMap,
+    io::{self, Write},
+};
 
 /// Your CLI entrypoint definition
 #[derive(Parser)]
@@ -17,24 +20,20 @@ pub struct Cli {
 #[derive(Subcommand)]
 pub enum Commands {
     /// Initialize this directory as a new .makeitso project
-    Init {
-        name: Option<String>,
-    },
+    Init { name: Option<String> },
     /// Execute a plugin command
     Run {
         /// The name of the plugin to run (e.g. api, worker)
         plugin: String,
-        
+
         /// Run without actually making changes
         #[arg(long)]
         dry_run: bool,
 
         /// Any extra args passed to the plugin command
         // #[arg(long, value_parser, num_args=1.., allow_hyphen_values=true)]
-        #[arg(trailing_var_arg = true, allow_hyphen_values=true)]
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
-
-
     },
     /// Create a new plugin from template
     Create {
@@ -57,7 +56,7 @@ pub enum Commands {
     /// Show detailed help for a plugin command
     Info {
         /// Plugin and command to show information for (e.g. my-plugin:deploy)
-        plugin_command: String,
+        plugin_command: Option<String>,
     },
 }
 
@@ -72,7 +71,7 @@ pub fn prompt_user(message: &str) -> anyhow::Result<bool> {
     Ok(matches!(input.as_str(), "y" | "yes"))
 }
 
-pub fn parse_cli_args(args: &[String]) -> HashMap<String, String> {    
+pub fn parse_cli_args(args: &[String]) -> HashMap<String, String> {
     let mut parsed_args = HashMap::new();
     let mut iter = args.iter();
 

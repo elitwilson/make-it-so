@@ -9,6 +9,10 @@ description = "A plugin scaffolded by Make It So."
 description = "Moo!!!!"
 script = "./examples.ts"
 
+# Optional arguments that users can pass via CLI
+[commands.moo.args.optional]
+message = { description = "Custom message to display", arg_type = "string" }
+
 # 👇 These are any external dependencies your plugin needs
 [deno_dependencies]
 # You can import any Deno-compatible module here by name
@@ -18,4 +22,4 @@ cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 # 👇 Everything below here is YOUR plugin-specific config that you can access in .ts via the ctx variable.
 [user_config]
 # Message to print out — this config is passed into your plugin via ctx.config
-message = "Moo It So 🪄" 
+message = "Make It So 🪄"

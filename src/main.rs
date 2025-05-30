@@ -17,7 +17,13 @@ mod validation;
 use anyhow::anyhow;
 use clap::Parser;
 use cli::{Cli, Commands};
-use commands::{create::create_plugin, init::run_init, run::run_cmd, add::add_plugin, help::show_help};
+use commands::{
+    add::add_plugin,
+    create::create_plugin,
+    help::{show_all_plugins, show_help},
+    init::run_init,
+    run::run_cmd,
+};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -63,9 +69,10 @@ fn main() -> anyhow::Result<()> {
             add_plugin(plugins, dry_run, registry, force)?;
         }
 
-        Commands::Info { plugin_command } => {
-            show_help(&plugin_command)?;
-        }
+        Commands::Info { plugin_command } => match plugin_command {
+            Some(plugin_cmd) => show_help(&plugin_cmd)?,
+            None => show_all_plugins()?,
+        },
     }
 
     Ok(())
