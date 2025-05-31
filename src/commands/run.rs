@@ -11,7 +11,7 @@ use crate::{
     constants::PLUGIN_MANIFEST_FILE,
     integrations::deno::{cache_deno_dependencies, install_deno, is_deno_installed},
     models::{ExecutionContext, PluginManifest, PluginMeta},
-    security::build_plugin_permissions,
+    security::{build_plugin_permissions, validate_deno_dependency_url},
     utils::find_project_root,
     validation::validate_plugin_args,
 };
@@ -98,6 +98,19 @@ pub fn run_cmd(
         deno_dependencies,
         commands: _, // commands already used earlier
     } = plugin_manifest;
+
+    // Validate Deno dependencies for security
+    for (dep_name, dep_url) in &deno_dependencies {
+        if let Err(security_error) = validate_deno_dependency_url(dep_url) {
+            return Err(anyhow::anyhow!(
+                "🛑 Security validation failed for dependency '{}' ({}): {}\n\
+                 → Deno dependencies must use secure HTTPS URLs from trusted sources.",
+                dep_name,
+                dep_url,
+                security_error
+            ));
+        }
+    }
 
     let meta = PluginMeta {
         name: plugin_name, // Move instead of clone - plugin_name not used after this

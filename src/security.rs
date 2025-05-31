@@ -259,6 +259,207 @@ pub fn build_plugin_permissions(project_root: &Path) -> Result<PluginPermissions
     Ok(PluginPermissions::safe_defaults(project_root))
 }
 
+/// Validate a registry URL for security
+pub fn validate_registry_url(url: &str) -> Result<String, String> {
+    validate_url_for_git_operations(url, "registry")
+}
+
+/// Core URL validation for git operations (registries)
+pub fn validate_url_for_git_operations(url: &str, context: &str) -> Result<String, String> {
+    // Check for empty or whitespace-only URLs
+    if url.trim().is_empty() {
+        return Err(format!("Empty {} URL not allowed", context));
+    }
+
+    let url_trimmed = url.trim();
+
+    // Handle SSH git URLs (special case - these are legitimate)
+    if url_trimmed.starts_with("git@") {
+        // SSH URLs like git@github.com:user/repo.git are safe
+        // They don't have schemes so URL parsing would fail
+        return Ok(url_trimmed.to_string());
+    }
+
+    // Check for IPv6 localhost patterns before URL parsing (which might fail)
+    if url_trimmed.contains("::1") {
+        return Err(format!(
+            "localhost/loopback access not allowed for {} URLs",
+            context
+        ));
+    }
+
+    // Parse the URL to extract components
+    let parsed_url = url::Url::parse(url_trimmed)
+        .map_err(|_| format!("Invalid {} URL format: {}", context, url_trimmed))?;
+
+    let scheme = parsed_url.scheme();
+    let host = parsed_url.host_str().unwrap_or("");
+
+    // Check dangerous schemes first (they might not have hosts)
+    match scheme {
+        "file" => return Err("file:// URLs not allowed for security reasons".to_string()),
+        "javascript" | "data" | "ftp" => {
+            return Err(format!("Dangerous scheme '{}' not allowed", scheme));
+        }
+        _ => {} // Continue with other validation
+    }
+
+    // Validate the host (this gives more specific error messages for network issues)
+    validate_host_for_external_access(host, context)?;
+
+    // Then validate remaining schemes
+    match scheme {
+        "http" => {
+            // Allow HTTP only for certain trusted domains
+            if !is_trusted_git_domain(host) {
+                return Err("HTTPS required for remote repositories (HTTP is insecure)".to_string());
+            }
+        }
+        "https" | "ssh" | "git" => {
+            // These schemes are generally safe
+        }
+        _ => {
+            return Err(format!(
+                "Unsupported scheme '{}' for {} URLs",
+                scheme, context
+            ));
+        }
+    }
+
+    Ok(url_trimmed.to_string())
+}
+
+/// Validate that a host is safe for external access
+pub fn validate_host_for_external_access(host: &str, context: &str) -> Result<(), String> {
+    if host.is_empty() {
+        return Err(format!("Empty host not allowed for {} URLs", context));
+    }
+
+    // Block localhost and loopback addresses (including IPv6)
+    if host == "localhost" || host == "127.0.0.1" || host == "::1" || host.starts_with("[::1]") {
+        return Err(format!(
+            "localhost/loopback access not allowed for {} URLs",
+            context
+        ));
+    }
+
+    // Block cloud metadata services
+    if host == "169.254.169.254" || host == "100.100.100.200" {
+        return Err("Cloud metadata service access not allowed".to_string());
+    }
+
+    // Block private network ranges
+    if is_private_ip(host) {
+        return Err(format!(
+            "Private network access not allowed for {} URLs",
+            context
+        ));
+    }
+
+    Ok(())
+}
+
+/// Check if an IP address is in a private network range
+pub fn is_private_ip(host: &str) -> bool {
+    // Check IPv4 private ranges
+    if host.starts_with("192.168.") {
+        return true;
+    }
+
+    if host.starts_with("10.") {
+        return true;
+    }
+
+    // 172.16.0.0 to 172.31.255.255
+    if host.starts_with("172.") {
+        if let Some(second_octet) = host.split('.').nth(1) {
+            if let Ok(num) = second_octet.parse::<u8>() {
+                if (16..=31).contains(&num) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Note: We're not blocking all RFC 1918 ranges or IPv6 private ranges
+    // for simplicity, but this covers the most common private networks
+    false
+}
+
+/// Check if a domain is trusted for git operations (allows HTTP)
+pub fn is_trusted_git_domain(_host: &str) -> bool {
+    // For now, we don't have any domains that we trust with HTTP
+    // All git operations should use HTTPS for security
+    // This function exists for future extensibility
+    false
+}
+
+/// Validate a Deno dependency URL for security
+pub fn validate_deno_dependency_url(url: &str) -> Result<String, String> {
+    validate_url_for_dependencies(url)
+}
+
+/// Core URL validation for dependencies
+pub fn validate_url_for_dependencies(url: &str) -> Result<String, String> {
+    // Check for empty or whitespace-only URLs
+    if url.trim().is_empty() {
+        return Err("Empty dependency URL not allowed".to_string());
+    }
+
+    let url_trimmed = url.trim();
+
+    // Block relative paths that could be injection attempts
+    if url_trimmed.starts_with("../") || url_trimmed.contains("/../") {
+        return Err("Relative path injection not allowed in dependency URLs".to_string());
+    }
+
+    // Check for IPv6 localhost patterns before URL parsing (which might fail)
+    if url_trimmed.contains("::1") {
+        return Err("localhost/loopback access not allowed for dependency URLs".to_string());
+    }
+
+    // Parse the URL to extract components
+    let parsed_url = url::Url::parse(url_trimmed)
+        .map_err(|_| format!("Invalid dependency URL format: {}", url_trimmed))?;
+
+    let scheme = parsed_url.scheme();
+    let host = parsed_url.host_str().unwrap_or("");
+
+    // Check dangerous schemes first (they might not have hosts)
+    match scheme {
+        "file" => return Err("file:// scheme not allowed for dependencies".to_string()),
+        "javascript" | "data" | "ftp" | "mailto" => {
+            return Err(format!(
+                "Dangerous scheme '{}' not allowed for dependencies",
+                scheme
+            ));
+        }
+        _ => {} // Continue with other validation
+    }
+
+    // Validate the host (this gives more specific error messages for network issues)
+    validate_host_for_external_access(host, "dependency")?;
+
+    // Then validate remaining schemes
+    match scheme {
+        "http" => {
+            // Require HTTPS for all remote dependencies (stricter than git)
+            return Err("HTTPS required for remote dependencies (HTTP is insecure)".to_string());
+        }
+        "https" => {
+            // HTTPS is safe for dependencies
+        }
+        _ => {
+            return Err(format!(
+                "Unsupported scheme '{}' for dependency URLs",
+                scheme
+            ));
+        }
+    }
+
+    Ok(url_trimmed.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -739,144 +940,6 @@ mod tests {
         // assert!(result.is_ok(), "Should allow localhost with explicit flag");
     }
 
-    // Placeholder function that tests will expect (to be implemented)
-    fn validate_registry_url(url: &str) -> Result<String, String> {
-        validate_url_for_git_operations(url, "registry")
-    }
-
-    /// Core URL validation for git operations (registries)
-    fn validate_url_for_git_operations(url: &str, context: &str) -> Result<String, String> {
-        // Check for empty or whitespace-only URLs
-        if url.trim().is_empty() {
-            return Err(format!("Empty {} URL not allowed", context));
-        }
-
-        let url_trimmed = url.trim();
-
-        // Handle SSH git URLs (special case - these are legitimate)
-        if url_trimmed.starts_with("git@") {
-            // SSH URLs like git@github.com:user/repo.git are safe
-            // They don't have schemes so URL parsing would fail
-            return Ok(url_trimmed.to_string());
-        }
-
-        // Check for IPv6 localhost patterns before URL parsing (which might fail)
-        if url_trimmed.contains("::1") {
-            return Err(format!(
-                "localhost/loopback access not allowed for {} URLs",
-                context
-            ));
-        }
-
-        // Parse the URL to extract components
-        let parsed_url = url::Url::parse(url_trimmed)
-            .map_err(|_| format!("Invalid {} URL format: {}", context, url_trimmed))?;
-
-        let scheme = parsed_url.scheme();
-        let host = parsed_url.host_str().unwrap_or("");
-
-        // Check dangerous schemes first (they might not have hosts)
-        match scheme {
-            "file" => return Err("file:// URLs not allowed for security reasons".to_string()),
-            "javascript" | "data" | "ftp" => {
-                return Err(format!("Dangerous scheme '{}' not allowed", scheme));
-            }
-            _ => {} // Continue with other validation
-        }
-
-        // Validate the host (this gives more specific error messages for network issues)
-        validate_host_for_external_access(host, context)?;
-
-        // Then validate remaining schemes
-        match scheme {
-            "http" => {
-                // Allow HTTP only for certain trusted domains
-                if !is_trusted_git_domain(host) {
-                    return Err(
-                        "HTTPS required for remote repositories (HTTP is insecure)".to_string()
-                    );
-                }
-            }
-            "https" | "ssh" | "git" => {
-                // These schemes are generally safe
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported scheme '{}' for {} URLs",
-                    scheme, context
-                ));
-            }
-        }
-
-        Ok(url_trimmed.to_string())
-    }
-
-    /// Validate that a host is safe for external access
-    fn validate_host_for_external_access(host: &str, context: &str) -> Result<(), String> {
-        if host.is_empty() {
-            return Err(format!("Empty host not allowed for {} URLs", context));
-        }
-
-        // Block localhost and loopback addresses (including IPv6)
-        if host == "localhost" || host == "127.0.0.1" || host == "::1" || host.starts_with("[::1]")
-        {
-            return Err(format!(
-                "localhost/loopback access not allowed for {} URLs",
-                context
-            ));
-        }
-
-        // Block cloud metadata services
-        if host == "169.254.169.254" || host == "100.100.100.200" {
-            return Err("Cloud metadata service access not allowed".to_string());
-        }
-
-        // Block private network ranges
-        if is_private_ip(host) {
-            return Err(format!(
-                "Private network access not allowed for {} URLs",
-                context
-            ));
-        }
-
-        Ok(())
-    }
-
-    /// Check if an IP address is in a private network range
-    fn is_private_ip(host: &str) -> bool {
-        // Check IPv4 private ranges
-        if host.starts_with("192.168.") {
-            return true;
-        }
-
-        if host.starts_with("10.") {
-            return true;
-        }
-
-        // 172.16.0.0 to 172.31.255.255
-        if host.starts_with("172.") {
-            if let Some(second_octet) = host.split('.').nth(1) {
-                if let Ok(num) = second_octet.parse::<u8>() {
-                    if (16..=31).contains(&num) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // Note: We're not blocking all RFC 1918 ranges or IPv6 private ranges
-        // for simplicity, but this covers the most common private networks
-        false
-    }
-
-    /// Check if a domain is trusted for git operations (allows HTTP)
-    fn is_trusted_git_domain(_host: &str) -> bool {
-        // For now, we don't have any domains that we trust with HTTP
-        // All git operations should use HTTPS for security
-        // This function exists for future extensibility
-        false
-    }
-
     // ========== DENO DEPENDENCY URL SECURITY TESTS ==========
 
     #[test]
@@ -1036,71 +1099,5 @@ mod tests {
             let result = validate_deno_dependency_url(url);
             assert!(result.is_err(), "{}: {}", description, url);
         }
-    }
-
-    // Placeholder function that tests will expect (to be implemented)
-    fn validate_deno_dependency_url(url: &str) -> Result<String, String> {
-        validate_url_for_dependencies(url)
-    }
-
-    /// Core URL validation for dependencies
-    fn validate_url_for_dependencies(url: &str) -> Result<String, String> {
-        // Check for empty or whitespace-only URLs
-        if url.trim().is_empty() {
-            return Err("Empty dependency URL not allowed".to_string());
-        }
-
-        let url_trimmed = url.trim();
-
-        // Block relative paths that could be injection attempts
-        if url_trimmed.starts_with("../") || url_trimmed.contains("/../") {
-            return Err("Relative path injection not allowed in dependency URLs".to_string());
-        }
-
-        // Check for IPv6 localhost patterns before URL parsing (which might fail)
-        if url_trimmed.contains("::1") {
-            return Err("localhost/loopback access not allowed for dependency URLs".to_string());
-        }
-
-        // Parse the URL to extract components
-        let parsed_url = url::Url::parse(url_trimmed)
-            .map_err(|_| format!("Invalid dependency URL format: {}", url_trimmed))?;
-
-        let scheme = parsed_url.scheme();
-        let host = parsed_url.host_str().unwrap_or("");
-
-        // Check dangerous schemes first (they might not have hosts)
-        match scheme {
-            "file" => return Err("file:// scheme not allowed for dependencies".to_string()),
-            "javascript" | "data" | "ftp" | "mailto" => {
-                return Err(format!(
-                    "Dangerous scheme '{}' not allowed for dependencies",
-                    scheme
-                ));
-            }
-            _ => {} // Continue with other validation
-        }
-
-        // Validate the host (this gives more specific error messages for network issues)
-        validate_host_for_external_access(host, "dependency")?;
-
-        // Then validate remaining schemes
-        match scheme {
-            "http" => {
-                // Require HTTPS for all remote dependencies (stricter than git)
-                return Err("HTTPS required for remote dependencies (HTTP is insecure)".to_string());
-            }
-            "https" => {
-                // HTTPS is safe for dependencies
-            }
-            _ => {
-                return Err(format!(
-                    "Unsupported scheme '{}' for dependency URLs",
-                    scheme
-                ));
-            }
-        }
-
-        Ok(url_trimmed.to_string())
     }
 }

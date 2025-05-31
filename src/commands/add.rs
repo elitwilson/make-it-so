@@ -1,20 +1,28 @@
+use crate::{
+    config::load_mis_config, git_utils::shallow_clone_repo, models::MakeItSoConfig,
+    security::validate_registry_url,
+};
 use anyhow::{Result, anyhow};
 use std::{collections::HashMap, fs, path::Path};
 use tempfile::TempDir;
-use crate::{config::load_mis_config, git_utils::shallow_clone_repo, models::MakeItSoConfig};
 
-pub fn add_plugin(plugins: Vec<String>, dry_run: bool, registry: Option<String>, force: bool) -> anyhow::Result<()> {
+pub fn add_plugin(
+    plugins: Vec<String>,
+    dry_run: bool,
+    registry: Option<String>,
+    force: bool,
+) -> anyhow::Result<()> {
     let (config, _, _) = load_mis_config().unwrap();
     add_plugin_with_config(plugins, dry_run, registry, force, config)
 }
 
 // Testable version that accepts config as parameter (dependency injection)
 pub fn add_plugin_with_config(
-    plugins: Vec<String>, 
-    dry_run: bool, 
-    registry: Option<String>, 
+    plugins: Vec<String>,
+    dry_run: bool,
+    registry: Option<String>,
     force: bool,
-    config: MakeItSoConfig
+    config: MakeItSoConfig,
 ) -> anyhow::Result<()> {
     if let Some(reg) = &registry {
         println!("Custom Registry Provided: {}", reg);
@@ -26,7 +34,10 @@ pub fn add_plugin_with_config(
             return Err(anyhow!("Plugin name cannot be empty"));
         }
         if plugin.contains(['/', '\\', ':', '*', '?', '"', '<', '>', '|']) {
-            return Err(anyhow!("Plugin name '{}' contains invalid characters", plugin));
+            return Err(anyhow!(
+                "Plugin name '{}' contains invalid characters",
+                plugin
+            ));
         }
     }
 
@@ -38,11 +49,23 @@ pub fn add_plugin_with_config(
     } else {
         vec![]
     };
-    
+
     if sources.is_empty() {
         return Err(anyhow!(
             "No registry sources found. Add a [registry] section to mis.toml or pass --registry <url>."
         ));
+    }
+
+    // Validate all registry URLs for security
+    for source in &sources {
+        if let Err(security_error) = validate_registry_url(source) {
+            return Err(anyhow!(
+                "🛑 Security validation failed for registry '{}': {}\n\
+                 → Registry URLs must be secure HTTPS git repositories from trusted sources.",
+                source,
+                security_error
+            ));
+        }
     }
 
     let cloned_repos = temp_clone_repositories(&sources)?;
@@ -53,7 +76,10 @@ pub fn add_plugin_with_config(
 
         // Check if the plugin exists in the project
         if plugin_exists_in_project(plugin_name) && !force {
-            println!("❌ Plugin {} already exists in the project. Use --force to overwrite.", plugin_name);
+            println!(
+                "❌ Plugin {} already exists in the project. Use --force to overwrite.",
+                plugin_name
+            );
             continue;
         }
 
@@ -68,7 +94,7 @@ pub fn add_plugin_with_config(
             // Check both root level and plugins subdirectory
             let root_plugin_path = temp_dir.path().join(plugin_name);
             let plugins_subdir_path = temp_dir.path().join("plugins").join(plugin_name);
-            
+
             let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
                 // Plugin is in plugins/ subdirectory
                 plugins_subdir_path
@@ -79,7 +105,7 @@ pub fn add_plugin_with_config(
                 // Plugin not found in this registry
                 continue;
             };
-            
+
             if dry_run {
                 println!("📝 Would install plugin '{}' from {}", plugin_name, url);
             } else {
@@ -90,7 +116,10 @@ pub fn add_plugin_with_config(
         }
 
         if !installed && !dry_run {
-            println!("❌ Failed to install plugin {} from any registry.", plugin_name);
+            println!(
+                "❌ Failed to install plugin {} from any registry.",
+                plugin_name
+            );
         }
     }
 
@@ -107,12 +136,12 @@ fn plugin_exists_in_registries(plugin_name: &str, cloned: &HashMap<String, TempD
         // Check both root level and inside 'plugins' subdirectory
         let root_plugin_path = temp_dir.path().join(plugin_name);
         let plugins_subdir_path = temp_dir.path().join("plugins").join(plugin_name);
-        
+
         // Check if plugin exists in plugins subdirectory first (more common)
         if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
             return true;
         }
-        
+
         // Fallback: check root level for backward compatibility
         if root_plugin_path.exists() && root_plugin_path.is_dir() {
             return true;
@@ -186,14 +215,14 @@ pub fn install_plugin_from_path(
 }
 
 /// Installs a plugin from a cloned repository (TempDir) without force.
-/// 
+///
 /// This is a convenience wrapper around `install_plugin_from_path` that handles
 /// the plugin discovery logic (checking both root and plugins/ subdirectory).
-/// 
+///
 /// Used primarily by:
 /// - Unit tests for isolated plugin installation testing
 /// - Legacy/external code that works with TempDir objects
-/// 
+///
 /// For new code, prefer `install_plugin_from_path` for direct path operations
 /// or `add_plugin` for the full CLI workflow.
 pub fn install_plugin_from_clone(
@@ -204,7 +233,7 @@ pub fn install_plugin_from_clone(
     // Check both root level and plugins subdirectory
     let root_plugin_path = source_tempdir.path().join(plugin_name);
     let plugins_subdir_path = source_tempdir.path().join("plugins").join(plugin_name);
-    
+
     let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
         plugins_subdir_path
     } else if root_plugin_path.exists() && root_plugin_path.is_dir() {
@@ -221,16 +250,16 @@ pub fn install_plugin_from_clone(
 }
 
 /// Installs a plugin from a cloned repository (TempDir) with optional force.
-/// 
+///
 /// This is a convenience wrapper around `install_plugin_from_path` that handles
 /// the plugin discovery logic (checking both root and plugins/ subdirectory)
 /// and provides force overwrite capability.
-/// 
+///
 /// Used primarily by:
 /// - Unit tests that need to test force overwrite behavior
 /// - The main add_plugin workflow for actual installations
 /// - Legacy/external code that works with TempDir objects
-/// 
+///
 /// The force parameter controls whether existing plugins are overwritten.
 pub fn install_plugin_from_clone_with_force(
     plugin_name: &str,
@@ -241,7 +270,7 @@ pub fn install_plugin_from_clone_with_force(
     // Check both root level and plugins subdirectory
     let root_plugin_path = source_tempdir.path().join(plugin_name);
     let plugins_subdir_path = source_tempdir.path().join("plugins").join(plugin_name);
-    
+
     let source_path = if plugins_subdir_path.exists() && plugins_subdir_path.is_dir() {
         plugins_subdir_path
     } else if root_plugin_path.exists() && root_plugin_path.is_dir() {
@@ -283,9 +312,9 @@ mod tests {
     use tempfile::{TempDir, tempdir};
 
     fn create_test_config(registry_sources: Option<Vec<String>>) -> MakeItSoConfig {
-        use std::collections::HashMap;
         use crate::models::RegistryConfig;
-        
+        use std::collections::HashMap;
+
         MakeItSoConfig {
             name: Some("test-project".to_string()),
             project_variables: HashMap::new(),
@@ -297,7 +326,7 @@ mod tests {
         let temp_dir = tempdir().unwrap();
         let makeitso_dir = temp_dir.path().join(".makeitso");
         fs::create_dir_all(&makeitso_dir).unwrap();
-        
+
         let config_content = format!(
             r#"
 name = "test-project"
@@ -308,22 +337,26 @@ foo = "bar"
 [registry]
 sources = [{}]
 "#,
-            sources.iter().map(|s| format!("\"{}\"", s)).collect::<Vec<_>>().join(", ")
+            sources
+                .iter()
+                .map(|s| format!("\"{}\"", s))
+                .collect::<Vec<_>>()
+                .join(", ")
         );
-        
+
         let config_path = makeitso_dir.join("mis.toml");
         fs::write(&config_path, config_content).unwrap();
-        
+
         (temp_dir, config_path)
     }
 
     fn create_mock_registry_with_plugins(plugins: Vec<&str>) -> TempDir {
         let registry_dir = tempdir().unwrap();
-        
+
         for plugin in plugins {
             let plugin_dir = registry_dir.path().join(plugin);
             fs::create_dir_all(&plugin_dir).unwrap();
-            
+
             // Create a simple plugin.toml file
             let plugin_toml = format!(
                 r#"
@@ -340,7 +373,7 @@ script = "./main.ts"
             fs::write(plugin_dir.join("plugin.toml"), plugin_toml).unwrap();
             fs::write(plugin_dir.join("main.ts"), "console.log('test');").unwrap();
         }
-        
+
         registry_dir
     }
 
@@ -349,14 +382,14 @@ script = "./main.ts"
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Create .makeitso/plugins/test-plugin directory
         let plugins_dir = temp_dir.path().join(".makeitso/plugins/test-plugin");
         fs::create_dir_all(&plugins_dir).unwrap();
-        
+
         let result = plugin_exists_in_project(&"test-plugin".to_string());
         assert!(result);
-        
+
         std::env::set_current_dir(original_dir).unwrap();
     }
 
@@ -365,10 +398,10 @@ script = "./main.ts"
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         let result = plugin_exists_in_project(&"nonexistent-plugin".to_string());
         assert!(!result);
-        
+
         std::env::set_current_dir(original_dir).unwrap();
     }
 
@@ -377,10 +410,10 @@ script = "./main.ts"
         let registry = create_mock_registry_with_plugins(vec!["test-plugin", "another-plugin"]);
         let mut cloned = HashMap::new();
         cloned.insert("test-registry".to_string(), registry);
-        
+
         let result = plugin_exists_in_registries("test-plugin", &cloned);
         assert!(result);
-        
+
         let result = plugin_exists_in_registries("nonexistent", &cloned);
         assert!(!result);
     }
@@ -390,22 +423,22 @@ script = "./main.ts"
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Create source plugin
         let registry = create_mock_registry_with_plugins(vec!["test-plugin"]);
-        
+
         // Ensure destination directory exists
         fs::create_dir_all(temp_dir.path().join(".makeitso/plugins")).unwrap();
-        
+
         let result = install_plugin_from_clone("test-plugin", &registry, "test-registry");
         assert!(result.is_ok());
-        
+
         // Verify plugin was copied
         let dest_path = temp_dir.path().join(".makeitso/plugins/test-plugin");
         assert!(dest_path.exists());
         assert!(dest_path.join("plugin.toml").exists());
         assert!(dest_path.join("main.ts").exists());
-        
+
         std::env::set_current_dir(original_dir).unwrap();
     }
 
@@ -414,19 +447,19 @@ script = "./main.ts"
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Create source plugin
         let registry = create_mock_registry_with_plugins(vec!["test-plugin"]);
-        
+
         // Create existing plugin in destination
         let dest_plugins = temp_dir.path().join(".makeitso/plugins");
         let existing_plugin = dest_plugins.join("test-plugin");
         fs::create_dir_all(&existing_plugin).unwrap();
-        
+
         let result = install_plugin_from_clone("test-plugin", &registry, "test-registry");
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("already exists"));
-        
+
         std::env::set_current_dir(original_dir).unwrap();
     }
 
@@ -435,39 +468,50 @@ script = "./main.ts"
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Create registry without our target plugin
         let registry = create_mock_registry_with_plugins(vec!["other-plugin"]);
-        
+
         fs::create_dir_all(temp_dir.path().join(".makeitso/plugins")).unwrap();
-        
+
         let result = install_plugin_from_clone("test-plugin", &registry, "test-registry");
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found in registry"));
-        
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("not found in registry")
+        );
+
         std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
     fn test_copy_dir_recursive_copies_all_files() {
         let temp_dir = tempdir().unwrap();
-        
+
         // Create source directory structure
         let src_dir = temp_dir.path().join("source");
         fs::create_dir_all(src_dir.join("subdir")).unwrap();
         fs::write(src_dir.join("file1.txt"), "content1").unwrap();
         fs::write(src_dir.join("subdir/file2.txt"), "content2").unwrap();
-        
+
         // Copy to destination
         let dst_dir = temp_dir.path().join("destination");
         let result = copy_dir_recursive(&src_dir, &dst_dir);
         assert!(result.is_ok());
-        
+
         // Verify all files were copied
         assert!(dst_dir.join("file1.txt").exists());
         assert!(dst_dir.join("subdir/file2.txt").exists());
-        assert_eq!(fs::read_to_string(dst_dir.join("file1.txt")).unwrap(), "content1");
-        assert_eq!(fs::read_to_string(dst_dir.join("subdir/file2.txt")).unwrap(), "content2");
+        assert_eq!(
+            fs::read_to_string(dst_dir.join("file1.txt")).unwrap(),
+            "content1"
+        );
+        assert_eq!(
+            fs::read_to_string(dst_dir.join("subdir/file2.txt")).unwrap(),
+            "content2"
+        );
     }
 
     // Tests for the main add_plugin function will be added next
@@ -478,23 +522,34 @@ script = "./main.ts"
         run_test_in_temp_dir(|temp_dir| {
             // Create source plugin
             let registry = create_mock_registry_with_plugins(vec!["test-plugin"]);
-            
+
             // Create existing plugin in destination with different content
             let dest_plugins = temp_dir.path().join(".makeitso/plugins");
             let existing_plugin = dest_plugins.join("test-plugin");
             fs::create_dir_all(&existing_plugin).unwrap();
             fs::write(existing_plugin.join("old-file.txt"), "old content").unwrap();
-            
+
             // Install with force=true should succeed
-            let result = install_plugin_from_clone_with_force("test-plugin", &registry, "test-registry", true);
+            let result = install_plugin_from_clone_with_force(
+                "test-plugin",
+                &registry,
+                "test-registry",
+                true,
+            );
             assert!(result.is_ok(), "Failed to install with force: {:?}", result);
-            
+
             // Verify new content exists and old content is gone
             let dest_path = temp_dir.path().join(".makeitso/plugins/test-plugin");
             assert!(dest_path.exists(), "Plugin directory was not created");
-            assert!(dest_path.join("plugin.toml").exists(), "plugin.toml was not copied");
+            assert!(
+                dest_path.join("plugin.toml").exists(),
+                "plugin.toml was not copied"
+            );
             assert!(dest_path.join("main.ts").exists(), "main.ts was not copied");
-            assert!(!dest_path.join("old-file.txt").exists(), "Old file was not removed");
+            assert!(
+                !dest_path.join("old-file.txt").exists(),
+                "Old file was not removed"
+            );
         });
     }
 
@@ -503,14 +558,19 @@ script = "./main.ts"
         run_test_in_temp_dir(|temp_dir| {
             // Create source plugin
             let registry = create_mock_registry_with_plugins(vec!["test-plugin"]);
-            
+
             // Create existing plugin in destination
             let dest_plugins = temp_dir.path().join(".makeitso/plugins");
             let existing_plugin = dest_plugins.join("test-plugin");
             fs::create_dir_all(&existing_plugin).unwrap();
-            
+
             // Install with force=false should fail
-            let result = install_plugin_from_clone_with_force("test-plugin", &registry, "test-registry", false);
+            let result = install_plugin_from_clone_with_force(
+                "test-plugin",
+                &registry,
+                "test-registry",
+                false,
+            );
             assert!(result.is_err(), "Should have failed when plugin exists");
             let error_msg = result.unwrap_err().to_string();
             assert!(error_msg.contains("already exists"));
@@ -525,11 +585,13 @@ script = "./main.ts"
             // Create two registries, both with the same plugin but different content
             let registry1 = tempdir().unwrap();
             let registry2 = tempdir().unwrap();
-            
+
             // Registry 1: plugin with version 1.0.0
             let plugin1_dir = registry1.path().join("test-plugin");
             fs::create_dir_all(&plugin1_dir).unwrap();
-            fs::write(plugin1_dir.join("plugin.toml"), r#"
+            fs::write(
+                plugin1_dir.join("plugin.toml"),
+                r#"
 [plugin]
 name = "test-plugin"
 version = "1.0.0"
@@ -537,14 +599,18 @@ description = "Version 1.0.0"
 
 [commands.test]
 script = "./main.ts"
-"#).unwrap();
+"#,
+            )
+            .unwrap();
             fs::write(plugin1_dir.join("main.ts"), "console.log('version 1.0.0');").unwrap();
             fs::write(plugin1_dir.join("marker1.txt"), "from-registry-1").unwrap();
-            
-            // Registry 2: plugin with version 2.0.0 
+
+            // Registry 2: plugin with version 2.0.0
             let plugin2_dir = registry2.path().join("test-plugin");
             fs::create_dir_all(&plugin2_dir).unwrap();
-            fs::write(plugin2_dir.join("plugin.toml"), r#"
+            fs::write(
+                plugin2_dir.join("plugin.toml"),
+                r#"
 [plugin]
 name = "test-plugin"
 version = "2.0.0"
@@ -552,12 +618,15 @@ description = "Version 2.0.0"
 
 [commands.test]
 script = "./main.ts"
-"#).unwrap();
+"#,
+            )
+            .unwrap();
             fs::write(plugin2_dir.join("main.ts"), "console.log('version 2.0.0');").unwrap();
             fs::write(plugin2_dir.join("marker2.txt"), "from-registry-2").unwrap();
-            
+
             // Create config pointing to both registries (registry1 first)
-            let config_content = format!(r#"
+            let config_content = format!(
+                r#"
 name = "test-project"
 
 [project_variables]
@@ -568,67 +637,83 @@ sources = [
     "{}",
     "{}"
 ]
-"#, registry1.path().display(), registry2.path().display());
-            
+"#,
+                registry1.path().display(),
+                registry2.path().display()
+            );
+
             let makeitso_dir = temp_dir.path().join(".makeitso");
             fs::create_dir_all(&makeitso_dir).unwrap();
             fs::write(makeitso_dir.join("mis.toml"), config_content).unwrap();
-            
+
             // Mock cloned repos
             let mut cloned_repos = HashMap::new();
             cloned_repos.insert(registry1.path().to_string_lossy().to_string(), registry1);
             cloned_repos.insert(registry2.path().to_string_lossy().to_string(), registry2);
-            
+
             // Install plugin - should only install from first registry
             fs::create_dir_all(temp_dir.path().join(".makeitso/plugins")).unwrap();
-            
+
             // Simulate the logic from add_plugin - find first matching registry and install
             let plugin_name = "test-plugin";
             let mut installed = false;
             for (url, temp_dir_ref) in &cloned_repos {
                 let plugin_path = temp_dir_ref.path().join(plugin_name);
                 if plugin_path.exists() && plugin_path.is_dir() {
-                    let result = install_plugin_from_clone_with_force(plugin_name, temp_dir_ref, url, false);
+                    let result =
+                        install_plugin_from_clone_with_force(plugin_name, temp_dir_ref, url, false);
                     assert!(result.is_ok(), "Failed to install plugin: {:?}", result);
                     installed = true;
                     break; // Only install from first matching registry
                 }
             }
             assert!(installed, "Plugin should have been installed");
-            
+
             // Verify plugin was installed from first registry only
             let dest_path = temp_dir.path().join(".makeitso/plugins/test-plugin");
             assert!(dest_path.exists(), "Plugin directory was not created");
-            
+
             // Check content to see which registry it came from
             let plugin_toml_content = fs::read_to_string(dest_path.join("plugin.toml")).unwrap();
             let main_ts_content = fs::read_to_string(dest_path.join("main.ts")).unwrap();
-            
+
             // Should contain content from registry1 (first registry)
-            assert!(plugin_toml_content.contains("1.0.0"), "Should have version 1.0.0 from first registry");
-            assert!(main_ts_content.contains("version 1.0.0"), "Should have content from first registry");
-            assert!(dest_path.join("marker1.txt").exists(), "Should have marker file from first registry");
-            assert!(!dest_path.join("marker2.txt").exists(), "Should NOT have marker file from second registry");
+            assert!(
+                plugin_toml_content.contains("1.0.0"),
+                "Should have version 1.0.0 from first registry"
+            );
+            assert!(
+                main_ts_content.contains("version 1.0.0"),
+                "Should have content from first registry"
+            );
+            assert!(
+                dest_path.join("marker1.txt").exists(),
+                "Should have marker file from first registry"
+            );
+            assert!(
+                !dest_path.join("marker2.txt").exists(),
+                "Should NOT have marker file from second registry"
+            );
         });
     }
 
     // Helper function for better test isolation
-    fn run_test_in_temp_dir<F>(test_fn: F) 
-    where 
+    fn run_test_in_temp_dir<F>(test_fn: F)
+    where
         F: FnOnce(&TempDir) + std::panic::UnwindSafe,
     {
         let temp_dir = tempdir().unwrap();
         let original_dir = std::env::current_dir().unwrap();
-        
+
         // Set up isolated test environment
         std::env::set_current_dir(temp_dir.path()).unwrap();
-        
+
         // Run the test with proper panic recovery
         let result = std::panic::catch_unwind(|| test_fn(&temp_dir));
-        
+
         // Always restore original directory, even if test panicked
         std::env::set_current_dir(original_dir).unwrap();
-        
+
         // Re-panic if the test failed
         if let Err(e) = result {
             std::panic::resume_unwind(e);
@@ -636,8 +721,8 @@ sources = [
     }
 
     // Improved test that creates a complete test environment
-    fn run_test_with_config<F>(config_content: &str, test_fn: F) 
-    where 
+    fn run_test_with_config<F>(config_content: &str, test_fn: F)
+    where
         F: FnOnce(&TempDir) + std::panic::UnwindSafe,
     {
         run_test_in_temp_dir(|temp_dir| {
@@ -645,10 +730,10 @@ sources = [
             let makeitso_dir = temp_dir.path().join(".makeitso");
             fs::create_dir_all(&makeitso_dir).unwrap();
             fs::write(makeitso_dir.join("mis.toml"), config_content).unwrap();
-            
+
             // Also create plugins directory for tests that need it
             fs::create_dir_all(makeitso_dir.join("plugins")).unwrap();
-            
+
             test_fn(temp_dir);
         });
     }
@@ -659,10 +744,10 @@ sources = [
             // Create .makeitso/plugins/test-plugin directory
             let plugins_dir = temp_dir.path().join(".makeitso/plugins/test-plugin");
             fs::create_dir_all(&plugins_dir).unwrap();
-            
+
             let result = plugin_exists_in_project(&"test-plugin".to_string());
             assert!(result);
-            
+
             let result = plugin_exists_in_project(&"nonexistent".to_string());
             assert!(!result);
         });
@@ -673,17 +758,20 @@ sources = [
         run_test_in_temp_dir(|temp_dir| {
             // Create source plugin
             let registry = create_mock_registry_with_plugins(vec!["test-plugin"]);
-            
+
             // Ensure destination directory exists
             fs::create_dir_all(temp_dir.path().join(".makeitso/plugins")).unwrap();
-            
+
             let result = install_plugin_from_clone("test-plugin", &registry, "test-registry");
             assert!(result.is_ok(), "Failed to install plugin: {:?}", result);
-            
+
             // Verify plugin was copied
             let dest_path = temp_dir.path().join(".makeitso/plugins/test-plugin");
             assert!(dest_path.exists(), "Plugin directory was not created");
-            assert!(dest_path.join("plugin.toml").exists(), "plugin.toml was not copied");
+            assert!(
+                dest_path.join("plugin.toml").exists(),
+                "plugin.toml was not copied"
+            );
             assert!(dest_path.join("main.ts").exists(), "main.ts was not copied");
         });
     }
@@ -691,38 +779,114 @@ sources = [
     #[test]
     fn test_add_plugin_validates_empty_plugin_names() {
         let config = create_test_config(Some(vec!["https://example.com/registry".to_string()]));
-        
-        let result = add_plugin_with_config(vec!["".to_string()], false, None, false, config.clone());
+
+        let result =
+            add_plugin_with_config(vec!["".to_string()], false, None, false, config.clone());
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Plugin name cannot be empty"));
-        
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Plugin name cannot be empty")
+        );
+
         let result = add_plugin_with_config(vec!["   ".to_string()], false, None, false, config);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Plugin name cannot be empty"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Plugin name cannot be empty")
+        );
     }
 
     #[test]
     fn test_add_plugin_validates_invalid_characters_in_plugin_names() {
         let config = create_test_config(Some(vec!["https://example.com/registry".to_string()]));
-        
-        let invalid_names = vec!["my/plugin", "my\\plugin", "my:plugin", "my*plugin", "my?plugin", "my\"plugin", "my<plugin", "my>plugin", "my|plugin"];
-        
+
+        let invalid_names = vec![
+            "my/plugin",
+            "my\\plugin",
+            "my:plugin",
+            "my*plugin",
+            "my?plugin",
+            "my\"plugin",
+            "my<plugin",
+            "my>plugin",
+            "my|plugin",
+        ];
+
         for invalid_name in invalid_names {
-            let result = add_plugin_with_config(vec![invalid_name.to_string()], false, None, false, config.clone());
-            assert!(result.is_err(), "Should have failed for invalid name: {}", invalid_name);
-            assert!(result.unwrap_err().to_string().contains("contains invalid characters"), 
-                   "Should mention invalid characters for: {}", invalid_name);
+            let result = add_plugin_with_config(
+                vec![invalid_name.to_string()],
+                false,
+                None,
+                false,
+                config.clone(),
+            );
+            assert!(
+                result.is_err(),
+                "Should have failed for invalid name: {}",
+                invalid_name
+            );
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("contains invalid characters"),
+                "Should mention invalid characters for: {}",
+                invalid_name
+            );
         }
     }
 
     #[test]
     fn test_add_plugin_should_not_have_duplicate_empty_sources_check() {
         let config = create_test_config(None); // No registry sources
-        
-        let result = add_plugin_with_config(vec!["test-plugin".to_string()], false, None, false, config);
+
+        let result =
+            add_plugin_with_config(vec!["test-plugin".to_string()], false, None, false, config);
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
         assert!(error_msg.contains("No registry sources found"));
         // Should not contain duplicated error messages
+    }
+
+    #[test]
+    fn test_add_plugin_blocks_localhost_registry_urls() {
+        let config = create_test_config(None); // No registry sources in config
+
+        // Test localhost URLs that should be blocked
+        let localhost_urls = vec![
+            "http://localhost/repo",
+            "https://localhost:8080/git",
+            "http://127.0.0.1/admin",
+            "https://127.0.0.1:3000/secret.git",
+        ];
+
+        for url in localhost_urls {
+            let result = add_plugin_with_config(
+                vec!["test-plugin".to_string()],
+                false,
+                Some(url.to_string()),
+                false,
+                config.clone(),
+            );
+
+            assert!(result.is_err(), "Should block localhost URL: {}", url);
+            let error_msg = result.unwrap_err().to_string();
+            assert!(
+                error_msg.contains("Security validation failed"),
+                "Should mention security validation for URL: {}. Got: {}",
+                url,
+                error_msg
+            );
+            assert!(
+                error_msg.contains("localhost") || error_msg.contains("loopback"),
+                "Should mention localhost issue for URL: {}. Got: {}",
+                url,
+                error_msg
+            );
+        }
     }
 }
