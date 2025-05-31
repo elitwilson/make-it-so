@@ -11,6 +11,7 @@ mod constants;
 mod git_utils;
 mod integrations;
 mod models;
+mod security;
 mod utils;
 mod validation;
 
