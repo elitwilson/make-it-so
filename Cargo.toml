@@ -1,6 +1,6 @@
 [package]
 name = "make-it-so"
-version = "0.1.0"
+version = "0.1.4"
 edition = "2024"
 description = "A CLI framework that runs project-scoped, Deno-powered plugins for your dev workflows."
 homepage = "https://github.com/elitwilson/make-it-so"
