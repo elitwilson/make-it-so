@@ -35,3 +35,32 @@ jobs:
           files: dist/mis-macos.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  build-windows:
+    name: Build and release (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package binary
+        run: |
+          mkdir dist
+          copy target\release\mis.exe dist\
+          powershell Compress-Archive -Path dist\mis.exe -DestinationPath dist\mis-windows.zip
+
+      - name: Upload Release (Windows)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/mis-windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
