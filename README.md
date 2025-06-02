@@ -98,18 +98,18 @@ Generated plugins use the shared API:
 ```ts
 // Import shared types and utilities from Make It So
 import type { PluginContext } from "../plugin-types.d.ts";
-import { loadContext, outputError, outputSuccess } from "../plugin-api.ts";
+import { mis } from "../plugin-api.ts";
 
 try {
   // Load context using the shared utility
-  const ctx: PluginContext = await loadContext();
+  const ctx: PluginContext = await mis.loadContext();
 
   // Your plugin logic here...
 
   // Output success result
-  outputSuccess({ message: "Plugin executed successfully!" });
+  mis.outputSuccess({ message: "Plugin executed successfully!" });
 } catch (error) {
-  outputError(error instanceof Error ? error.message : String(error));
+  mis.outputError(error instanceof Error ? error.message : String(error));
 }
 ```
 
