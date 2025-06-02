@@ -281,6 +281,7 @@ console.log("project vars:", ctx.project_variables);
 | Feature                       | Description                                                                                            | Status |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
 | Plugin-scoped security config | Specify Deno sandboxing settings on a plugin level. (Currently defaults to conservative Deno defaults) | 🚧 WIP |
+| Full Documentation            | Docs for CLI usage, Typescript plugin API, etc... to come                                              | 🚧 WIP |
 
 ---
 
