@@ -86,21 +86,8 @@ pub fn run_cmd(
 
     let project_root = std::env::current_dir()?.to_string_lossy().to_string();
 
-    // Destructure plugin manifest to move values where possible
-    let PluginManifest {
-        plugin:
-            PluginMeta {
-                name: _,
-                description,
-                version,
-            },
-        user_config,
-        deno_dependencies,
-        commands: _, // commands already used earlier
-    } = plugin_manifest;
-
     // Validate Deno dependencies for security
-    for (dep_name, dep_url) in &deno_dependencies {
+    for (dep_name, dep_url) in &plugin_manifest.deno_dependencies {
         if let Err(security_error) = validate_deno_dependency_url(dep_url) {
             return Err(anyhow::anyhow!(
                 "🛑 Security validation failed for dependency '{}' ({}): {}\n\
@@ -114,8 +101,8 @@ pub fn run_cmd(
 
     let meta = PluginMeta {
         name: plugin_name, // Move instead of clone - plugin_name not used after this
-        description,
-        version,
+        description: plugin_manifest.plugin.description.clone(),
+        version: plugin_manifest.plugin.version.clone(),
     };
 
     let (mis_config, _, __) = load_mis_config()?;
@@ -127,14 +114,21 @@ pub fn run_cmd(
 
     let ctx = ExecutionContext::from_parts(
         plugin_args_toml,
-        user_config,
+        plugin_manifest.user_config.clone(),
         mis_config.project_variables,
         project_root,
         meta,
         dry_run,
     )?;
 
-    execute_plugin(&plugin_path, &command.script, &ctx, &deno_dependencies)?;
+    execute_plugin(
+        &plugin_path,
+        &command.script,
+        &ctx,
+        &plugin_manifest.deno_dependencies,
+        &plugin_manifest,
+        command_name,
+    )?;
 
     Ok(())
 }
@@ -185,6 +179,8 @@ pub fn execute_plugin(
     script_file_name: &str,
     ctx: &ExecutionContext,
     deno_dependencies: &HashMap<String, String>,
+    plugin_manifest: &PluginManifest,
+    command_name: &str,
 ) -> Result<()> {
     // Cache any [deno_dependencies] first
     cache_deno_dependencies(deno_dependencies)?;
@@ -206,9 +202,9 @@ pub fn execute_plugin(
         );
     }
 
-    // Build secure permissions for the plugin
+    // Build secure permissions for the plugin using manifest-declared permissions
     let project_root = std::env::current_dir()?;
-    let permissions = build_plugin_permissions(&project_root)?;
+    let permissions = build_plugin_permissions(&project_root, plugin_manifest, command_name)?;
 
     // Build Deno command arguments
     let mut deno_args = vec!["run".to_string()];
@@ -287,6 +283,7 @@ mod tests {
                 description: Some("Deploy application".to_string()),
                 instructions: None,
                 args: Some(CommandArgs { required, optional }),
+                permissions: None,
             },
         );
 
@@ -299,6 +296,7 @@ mod tests {
             commands,
             deno_dependencies: HashMap::new(),
             user_config: None,
+            permissions: None,
         }
     }
 

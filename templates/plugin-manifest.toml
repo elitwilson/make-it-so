@@ -4,6 +4,15 @@ name = "examples"
 version = "0.1.0"
 description = "A plugin scaffolded by Make It So."
 
+# 👇 Plugin-level security permissions (inherited by all commands)
+# Remove or modify these based on what your plugin actually needs
+# [plugin.permissions]
+# file_read = ["./config", "./data"]          # Additional files your plugin can read
+# file_write = ["./output", "./logs"]         # Additional files your plugin can write  
+# network = ["api.github.com"]                # Domains your plugin can access
+# run_commands = ["git", "npm"]               # Commands your plugin can execute
+# env_access = true                           # Whether to allow environment variable access
+
 # 👇 These are the CLI commands this plugin supports
 [commands.moo]
 description = "Moo!!!!"
@@ -12,6 +21,11 @@ script = "./examples.ts"
 # Optional arguments that users can pass via CLI
 [commands.moo.args.optional]
 message = { description = "Custom message to display", arg_type = "string" }
+
+# 👇 Command-specific security permissions (extends plugin permissions)
+# [commands.moo.permissions]
+# network = ["cowsay-api.example.com"]        # Add network access for this command only
+# run_commands = ["cowsay"]                   # Add command execution for this command only
 
 # 👇 These are any external dependencies your plugin needs
 [deno_dependencies]

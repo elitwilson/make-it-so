@@ -1,12 +1,23 @@
-# Example Plugin Configuration with Argument Validation
-# This demonstrates the new argument validation features in Make It So CLI
+# Example Plugin Configuration with Argument Validation and Security Permissions
+# This demonstrates the new argument validation and security features in Make It So CLI
 
 [plugin]
 name = "deployment-manager"
 version = "2.1.0"
 description = "Manages deployments with comprehensive argument validation"
 
-# Command with comprehensive argument validation
+# Plugin-level security permissions (inherited by all commands)
+[plugin.permissions]
+file_read = [
+  "./config",
+  "./deployment",
+  "./secrets",
+] # Read deployment configs and secrets
+file_write = ["./logs", "./output"] # Write logs and output files
+env_access = true # Need env vars for configuration
+network = ["api.github.com", "registry.npmjs.org"] # Access to common APIs
+
+# Command with comprehensive argument validation and additional permissions
 [commands.deploy]
 description = "Deploy application to specified environment"
 script = "./deploy.ts"
@@ -21,7 +32,15 @@ replicas = { description = "Number of replicas to deploy", arg_type = "integer",
 timeout = { description = "Deployment timeout in seconds", arg_type = "float", default_value = "30.0" }
 config_file = { description = "Path to configuration file", arg_type = "string", default_value = "deploy.config.json" }
 
-# Command with only required arguments
+# Deploy command needs additional permissions for git operations
+[commands.deploy.permissions]
+run_commands = ["git", "docker", "kubectl"] # Execute deployment tools
+network = [
+  "hub.docker.com",
+  "k8s.prod.company.com",
+] # Access Docker Hub and K8s API
+
+# Command with only required arguments and limited permissions
 [commands.rollback]
 description = "Rollback to previous version"
 script = "./rollback.ts"
@@ -30,7 +49,11 @@ script = "./rollback.ts"
 environment = { description = "Environment to rollback", arg_type = "string" }
 target_version = { description = "Version to rollback to", arg_type = "string" }
 
-# Command with only optional arguments
+# Rollback only needs basic git access
+[commands.rollback.permissions]
+run_commands = ["git"] # Only git for rollback operations
+
+# Command with only optional arguments and read-only permissions
 [commands.status]
 description = "Check deployment status"
 script = "./status.ts"
@@ -40,7 +63,14 @@ environment = { description = "Environment to check", arg_type = "string", defau
 verbose = { description = "Show detailed status", arg_type = "boolean", default_value = "false" }
 format = { description = "Output format (json, table, yaml)", arg_type = "string", default_value = "table" }
 
-# Command with no arguments (backward compatibility)
+# Status command only needs to read status, no execution permissions
+[commands.status.permissions]
+network = [
+  "monitoring.company.com",
+  "grafana.company.com",
+] # Access monitoring APIs
+
+# Command with no arguments and minimal permissions (inherits plugin defaults only)
 [commands.health]
 description = "Check system health"
 script = "./health.ts"
@@ -54,4 +84,4 @@ zod = "https://deno.land/x/zod@v3.22.4/mod.ts"
 [user_config]
 default_environment = "staging"
 max_replicas = 10
-notification_webhook = "https://hooks.slack.com/services/..." 
+notification_webhook = "https://hooks.slack.com/services/..."

