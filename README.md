@@ -34,7 +34,7 @@ mis create my-plugin    # <-- Create a new plugin via scaffolding
 mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plugin"
 ```
 
-## 🗂 What It Does
+## What It Does
 
 - Creates a `.makeitso/` folder in your current directory with TypeScript API
   files.
@@ -44,7 +44,21 @@ mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plu
 - Supports plugin composition for building complex workflows.
 - Keeps everything project-local — no global installs or `node_modules` clutter.
 
-## 🧱 Plugin Workflow
+## Security
+
+Make It So is built with security in mind, and Deno was chosen specifically for\
+its secure-by-default execution model. Plugins run in a sandboxed environment\
+with explicit, validated permissions:
+
+- File access is limited to the project directory
+- Network and command execution are disabled by default
+- Dangerous paths, commands, and hosts are blocked via internal validation
+
+Active development is focused on manifest-based permission config, user prompts\
+for escalations, and a possible trust model for plugin authors. Until then,\
+only explicitly granted and validated permissions are allowed.
+
+## Plugin Workflow
 
 1. `mis init`\
    Creates `.makeitso/` with config file and TypeScript API files for plugin
@@ -57,7 +71,7 @@ mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plu
 3. `mis run my-plugin:your-command`\
    Runs a specific command defined by your plugin.
 
-## 🧑‍💻 TypeScript Development Experience
+## TypeScript Development Experience
 
 When you run `mis init`, Make It So creates TypeScript API files in your
 `.makeitso/` directory:
@@ -99,7 +113,7 @@ try {
 }
 ```
 
-## 🐄 Example Command
+## Example Command
 
 The scaffolded plugin includes a `moo` command using the
 [`cowsay`](https://deno.land/x/cowsay) library:
@@ -147,7 +161,7 @@ to start building plugins right away.
 
 > ✅ You only need to do this once — future commands will just work.
 
-## 🔗 Plugin Composition
+## Plugin Composition
 
 The TypeScript API includes powerful utilities for building complex workflows by
 composing multiple plugins:
@@ -173,12 +187,12 @@ const validationResult = await runPluginSafe("validate-semver", {
 });
 ```
 
-## 📄 Plugin Manifest (`plugin.toml`)
+## Plugin Manifest (`plugin.toml`)
 
 Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes a
 `plugin.toml` file that describes what it does and how to run it.
 
-### 🔧 Full Example
+### Full Example
 
 ```toml
 [plugin]
@@ -203,7 +217,7 @@ cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 message = "Moo It So 🪄"      # <-- Accessible via 'ctx.config' in your .ts file
 ```
 
-### 🧩 Plugin Fields
+### Plugin Fields
 
 | Field         | Type   | Description                            |
 | ------------- | ------ | -------------------------------------- |
@@ -211,7 +225,7 @@ message = "Moo It So 🪄"      # <-- Accessible via 'ctx.config' in your .ts fi
 | `version`     | string | Plugin version (e.g. `0.1.0`)          |
 | `description` | string | Description of what this plugin does   |
 
-### 🚀 Commands
+### Commands
 
 Define commands under `[commands.<command-name>]`:
 
@@ -220,7 +234,7 @@ Define commands under `[commands.<command-name>]`:
 | `description` | string | Description shown in help output |
 | `script`      | string | Path to the `.ts` script to run  |
 
-### 📦 Dependencies
+### Dependencies
 
 List external Deno modules used by the plugin:
 
@@ -235,7 +249,7 @@ These are available in your script:
 import { say } from "cowsay";
 ```
 
-### ⚙️ Plugin Config
+### Plugin Config
 
 Under `[user_config]`, you can define any config your plugin script needs. It's
 available via `ctx.config` in TypeScript:
@@ -253,7 +267,7 @@ console.log("project vars:", ctx.project_variables);
 
 ---
 
-## 🛠 Available Commands
+## Available Commands
 
 | Command                    | Description                         | Status   |
 | -------------------------- | ----------------------------------- | -------- |
@@ -261,6 +275,12 @@ console.log("project vars:", ctx.project_variables);
 | `mis create <plugin>`      | Create a new plugin                 | ✅ Ready |
 | `mis run <plugin:command>` | Run a plugin command                | ✅ Ready |
 | `mis add <plugin>`         | Install plugins from registry       | 🚧 WIP   |
+
+## Planned Features
+
+| Feature                       | Description                                                                                            | Status |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
+| Plugin-scoped security config | Specify Deno sandboxing settings on a plugin level. (Currently defaults to conservative Deno defaults) | 🚧 WIP |
 
 ---
 
