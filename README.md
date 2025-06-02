@@ -97,8 +97,8 @@ Generated plugins use the shared API:
 
 ```ts
 // Import shared types and utilities from Make It So
-import type { PluginContext } from "../plugin-types.d.ts";
-import { mis } from "../plugin-api.ts";
+import type { PluginContext } from "../mis-plugin-types.d.ts";
+import { mis } from "../mis-plugin-api.ts";
 
 try {
   // Load context using the shared utility
