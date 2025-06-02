@@ -3,9 +3,9 @@
 **Make It So** is a CLI framework that lets you build your own project-specific
 CLI commands using TypeScript plugins powered by Deno.
 
-![Version](https://img.shields.io/github/v/release/elitwilson/make-it-so)
-![Build](https://github.com/elitwilson/make-it-so/actions/workflows/release.yml/badge.svg)
-![License](https://img.shields.io/github/license/elitwilson/make-it-so)
+[![Version](https://img.shields.io/github/v/release/elitwilson/make-it-so)](https://github.com/elitwilson/make-it-so/releases)
+[![Build](https://github.com/elitwilson/make-it-so/actions/workflows/release.yml/badge.svg)](https://github.com/elitwilson/make-it-so/actions/workflows/release.yml)
+[![License](https://img.shields.io/github/license/elitwilson/make-it-so)](https://github.com/elitwilson/make-it-so/blob/main/LICENSE)
 
 # Installation
 
