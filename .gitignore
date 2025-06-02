@@ -1,8 +1,7 @@
 *.DS_Store
 /target 
-testdata/fake-campsite-app/.git
-/testdata/fake-campsite-app/*
-!/testdata/fake-campsite-app/.gitignore
 .makeitso
 
+# Other
 notes/
+testdata/
