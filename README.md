@@ -41,7 +41,7 @@ mis run my-plugin:moo   # <-- Run the "moo" command in the newly created "my-plu
 - Lets you define your own CLI commands with scaffolded TypeScript plugins.
 - Each plugin runs in Deno and can define its own dependencies and config.
 - Provides rich TypeScript types and utilities for plugin development.
-- Supports plugin composition for building complex workflows.
+- Supports plugin composition for building complex workflows. 🚧 WIP
 - Keeps everything project-local — no global installs or `node_modules` clutter.
 
 ## Security
@@ -161,7 +161,7 @@ to start building plugins right away.
 
 > ✅ You only need to do this once — future commands will just work.
 
-## Plugin Composition
+## Plugin Composition (🚧 WIP)
 
 The TypeScript API includes powerful utilities for building complex workflows by
 composing multiple plugins:
@@ -281,6 +281,7 @@ console.log("project vars:", ctx.project_variables);
 | Feature                       | Description                                                                                            | Status |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
 | Plugin-scoped security config | Specify Deno sandboxing settings on a plugin level. (Currently set to conservative defaults)           | 🚧 WIP |
+| Plugin Composition/Workflows  | A primary goal of Make It So is to allow for script-chaining via composition for complex workflows     | 🚧 WIP |
 | Full Documentation            | Docs for CLI usage, Typescript plugin API, etc... to come                                              | 🚧 WIP |
 
 ---
