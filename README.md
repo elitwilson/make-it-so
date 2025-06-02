@@ -16,8 +16,7 @@ You can install `mis` via Homebrew (macOS/Linux) or Scoop (Windows).
 ## macOS / Linux (via Homebrew 🍺)
 
 ```sh
-brew tap elitwilson/make-it-so
-brew install mis
+brew install elitwilson/make-it-so/mis
 ```
 
 ## Windows (via Scoop)
