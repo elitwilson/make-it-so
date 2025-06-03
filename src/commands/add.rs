@@ -1,6 +1,6 @@
 use crate::{
     config::load_mis_config, git_utils::shallow_clone_repo, models::MakeItSoConfig,
-    security::validate_registry_url,
+    plugin_utils::plugin_exists_in_project, security::validate_registry_url,
 };
 use anyhow::{Result, anyhow};
 use std::{collections::HashMap, fs, path::Path};
@@ -83,7 +83,7 @@ pub fn add_plugin_with_config(
             continue;
         }
 
-        if !plugin_exists_in_registries(&plugin_name, &cloned_repos) {
+        if !plugin_exists_in_registries(plugin_name, &cloned_repos) {
             println!("❌ Plugin {} not found in any registry.", plugin_name);
             continue;
         }
@@ -124,11 +124,6 @@ pub fn add_plugin_with_config(
     }
 
     Ok(())
-}
-
-fn plugin_exists_in_project(name: &String) -> bool {
-    let plugin_path = Path::new(".makeitso/plugins").join(name);
-    plugin_path.exists() && plugin_path.is_dir()
 }
 
 fn plugin_exists_in_registries(plugin_name: &str, cloned: &HashMap<String, TempDir>) -> bool {
@@ -387,7 +382,7 @@ script = "./main.ts"
         let plugins_dir = temp_dir.path().join(".makeitso/plugins/test-plugin");
         fs::create_dir_all(&plugins_dir).unwrap();
 
-        let result = plugin_exists_in_project(&"test-plugin".to_string());
+        let result = plugin_exists_in_project("test-plugin");
         assert!(result);
 
         std::env::set_current_dir(original_dir).unwrap();
@@ -399,7 +394,7 @@ script = "./main.ts"
         let original_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(temp_dir.path()).unwrap();
 
-        let result = plugin_exists_in_project(&"nonexistent-plugin".to_string());
+        let result = plugin_exists_in_project("nonexistent-plugin");
         assert!(!result);
 
         std::env::set_current_dir(original_dir).unwrap();
@@ -745,10 +740,10 @@ sources = [
             let plugins_dir = temp_dir.path().join(".makeitso/plugins/test-plugin");
             fs::create_dir_all(&plugins_dir).unwrap();
 
-            let result = plugin_exists_in_project(&"test-plugin".to_string());
+            let result = plugin_exists_in_project("test-plugin");
             assert!(result);
 
-            let result = plugin_exists_in_project(&"nonexistent".to_string());
+            let result = plugin_exists_in_project("nonexistent");
             assert!(!result);
         });
     }

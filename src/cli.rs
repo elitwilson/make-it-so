@@ -53,6 +53,13 @@ pub enum Commands {
         #[arg(long)]
         force: bool,
     },
+    /// Update a specific plugin or all plugins to the latest versions
+    Update {
+        plugin: Option<String>,
+
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Show detailed help for a plugin command
     Info {
         /// Plugin and command to show information for (e.g. my-plugin:deploy)

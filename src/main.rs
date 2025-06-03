@@ -11,6 +11,7 @@ mod constants;
 mod git_utils;
 mod integrations;
 mod models;
+mod plugin_utils;
 mod security;
 mod utils;
 mod validation;
@@ -24,6 +25,7 @@ use commands::{
     help::{show_all_plugins, show_help},
     init::run_init,
     run::run_cmd,
+    update::update_plugin,
 };
 
 fn main() -> anyhow::Result<()> {
@@ -68,6 +70,10 @@ fn main() -> anyhow::Result<()> {
             force,
         } => {
             add_plugin(plugins, dry_run, registry, force)?;
+        }
+
+        Commands::Update { plugin, dry_run } => {
+            update_plugin(plugin, dry_run)?;
         }
 
         Commands::Info { plugin_command } => match plugin_command {
