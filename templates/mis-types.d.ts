@@ -11,7 +11,7 @@
 export type PluginContext = {
   plugin_args: Record<string, unknown>;
   manifest: PluginManifest; // Plugin metadata (from manifest.toml)
-  user_config: Record<string, unknown>; // User configuration (from config.toml)
+  config: Record<string, unknown>; // User configuration (from config.toml)
   project_variables: Record<string, unknown>; // Project-level variables
   project_root: string;
   meta: PluginMeta;

@@ -24,7 +24,7 @@ Deno.test("PluginContext - has required fields", () => {
       },
       registry: "https://github.com/example/plugins.git",
     },
-    user_config: {
+    config: {
       api_key: "secret",
       timeout: 30,
       theme: "dark",
@@ -46,7 +46,7 @@ Deno.test("PluginContext - has required fields", () => {
   // Verify all required fields exist
   assertExists(mockContext.plugin_args);
   assertExists(mockContext.manifest);
-  assertExists(mockContext.user_config);
+  assertExists(mockContext.config);
   assertExists(mockContext.project_variables);
   assertExists(mockContext.project_root);
   assertExists(mockContext.meta);

@@ -2,7 +2,7 @@
 import type { PluginContext } from "../../mis-types.d.ts";
 import { mis } from "../../mis-plugin-api.ts";
 
-// Import any external dependencies your plugin needs. Declare them in plugin.toml under [deno_dependencies].
+// Import any external dependencies your plugin needs. Declare them in manifest.toml under [deno_dependencies].
 // This one was declared automatically for you.
 import * as cow from "https://deno.land/x/cowsay@1.1/mod.ts";
 

@@ -7,7 +7,7 @@ function getConfig<T = unknown>(
   key: string,
   defaultValue?: T,
 ): T {
-  return (ctx.user_config[key] as T) ?? (defaultValue as T);
+  return (ctx.config[key] as T) ?? (defaultValue as T);
 }
 
 function getArg<T = unknown>(
@@ -58,7 +58,7 @@ const mockContext: PluginContext = {
     },
     registry: "https://github.com/example/plugins.git",
   },
-  user_config: {
+  config: {
     api_key: "secret-key",
     timeout: 30,
     theme: "dark",

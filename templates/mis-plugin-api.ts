@@ -38,7 +38,7 @@ function getConfig<T = unknown>(
   key: string,
   defaultValue?: T,
 ): T {
-  return (ctx.user_config[key] as T) ?? (defaultValue as T);
+  return (ctx.config[key] as T) ?? (defaultValue as T);
 }
 
 /**
