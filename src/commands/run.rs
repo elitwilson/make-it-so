@@ -7,8 +7,11 @@ use std::{
 
 use crate::{
     cli::{parse_cli_args, prompt_user},
-    config::{load_mis_config, plugins::load_plugin_manifest},
-    constants::PLUGIN_MANIFEST_FILE,
+    config::{
+        load_mis_config,
+        plugins::{load_plugin_manifest, load_plugin_user_config},
+    },
+    constants::{PLUGIN_CONFIG_FILE, PLUGIN_MANIFEST_FILE},
     integrations::deno::{cache_deno_dependencies, install_deno, is_deno_installed},
     models::{ExecutionContext, PluginManifest, PluginMeta},
     security::{build_plugin_permissions, validate_deno_dependency_url},
@@ -25,7 +28,10 @@ pub fn run_cmd(
 ) -> Result<()> {
     let plugin_path = validate_plugin_exists(&plugin_name)?;
     let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
+    let config_path = plugin_path.join(PLUGIN_CONFIG_FILE);
+
     let plugin_manifest = load_plugin_manifest(&manifest_path)?;
+    let plugin_user_config = load_plugin_user_config(&config_path)?;
 
     if !is_deno_installed() {
         let should_install = prompt_user("Deno is not installed. Would you like to install it?")?;
@@ -103,6 +109,7 @@ pub fn run_cmd(
         name: plugin_name, // Move instead of clone - plugin_name not used after this
         description: plugin_manifest.plugin.description.clone(),
         version: plugin_manifest.plugin.version.clone(),
+        registry: None, // Not needed for execution context
     };
 
     let (mis_config, _, __) = load_mis_config()?;
@@ -114,7 +121,8 @@ pub fn run_cmd(
 
     let ctx = ExecutionContext::from_parts(
         plugin_args_toml,
-        plugin_manifest.user_config.clone(),
+        &plugin_manifest,
+        &plugin_user_config,
         mis_config.project_variables,
         project_root,
         meta,
@@ -160,10 +168,10 @@ fn validate_plugin_exists(plugin_name: &str) -> Result<PathBuf> {
         );
     }
 
-    let manifest_path = plugin_path.join("plugin.toml");
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
     if !manifest_path.exists() {
         anyhow::bail!(
-            "🛑 plugin.toml not found for plugin '{}'.\n\
+            "🛑 manifest.toml not found for plugin '{}'.\n\
              → Expected to find: {}\n\
              → Did something delete it?",
             plugin_name,
@@ -292,10 +300,10 @@ mod tests {
                 name: "test-plugin".to_string(),
                 description: Some("Test plugin".to_string()),
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands,
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: None,
         }
     }
@@ -942,6 +950,336 @@ description = "Slow command"
         assert!(
             error_msg.contains("plugin.toml") || error_msg.contains("manifest"),
             "Error should mention missing plugin.toml"
+        );
+
+        std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    // ========== NEW CONTEXT PASSING TESTS ==========
+
+    #[test]
+    fn test_execution_context_includes_both_manifest_and_config() {
+        use crate::models::{PluginManifest, PluginMeta, PluginUserConfig};
+        use std::collections::HashMap;
+
+        // Create test manifest
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: Some("Test plugin for context".to_string()),
+                version: "1.2.3".to_string(),
+                registry: Some("https://github.com/example/plugins.git".to_string()),
+            },
+            commands: HashMap::new(),
+            deno_dependencies: {
+                let mut deps = HashMap::new();
+                deps.insert(
+                    "oak".to_string(),
+                    "https://deno.land/x/oak@v12.6.1/mod.ts".to_string(),
+                );
+                deps
+            },
+            permissions: None,
+        };
+
+        // Create test user config
+        let mut user_config = PluginUserConfig::default();
+        user_config.config.insert(
+            "api_key".to_string(),
+            toml::Value::String("secret-123".to_string()),
+        );
+        user_config
+            .config
+            .insert("debug".to_string(), toml::Value::Boolean(true));
+        user_config
+            .config
+            .insert("timeout".to_string(), toml::Value::Integer(5000));
+
+        // Create execution context
+        let project_variables = HashMap::new();
+        let plugin_args = HashMap::new();
+        let ctx = ExecutionContext::from_parts(
+            plugin_args,
+            &manifest,
+            &user_config,
+            project_variables,
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        // Serialize to JSON to verify structure
+        let json_str = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Verify manifest data is present
+        assert!(
+            json_str.contains("\"name\": \"test-plugin\""),
+            "Should contain plugin name"
+        );
+        assert!(
+            json_str.contains("\"version\": \"1.2.3\""),
+            "Should contain plugin version"
+        );
+        assert!(
+            json_str.contains("\"registry\": \"https://github.com/example/plugins.git\""),
+            "Should contain registry"
+        );
+        assert!(json_str.contains("oak"), "Should contain dependency names");
+
+        // Verify user config data is present
+        assert!(
+            json_str.contains("\"api_key\": \"secret-123\""),
+            "Should contain user config values"
+        );
+        assert!(
+            json_str.contains("\"debug\": true"),
+            "Should contain boolean config"
+        );
+        assert!(
+            json_str.contains("\"timeout\": 5000"),
+            "Should contain integer config"
+        );
+
+        // Verify the structure separates manifest and config
+        assert!(
+            json_str.contains("\"manifest\":"),
+            "Should have manifest section"
+        );
+        assert!(
+            json_str.contains("\"config\":"),
+            "Should have config section"
+        );
+    }
+
+    #[test]
+    fn test_execution_context_with_empty_user_config() {
+        use crate::models::{PluginManifest, PluginMeta, PluginUserConfig};
+        use std::collections::HashMap;
+
+        // Create minimal manifest
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "minimal-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                registry: None,
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            permissions: None,
+        };
+
+        // Empty user config (default)
+        let user_config = PluginUserConfig::default();
+
+        let ctx = ExecutionContext::from_parts(
+            HashMap::new(),
+            &manifest,
+            &user_config,
+            HashMap::new(),
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        let json_str = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Should still have both sections, even if config is empty
+        assert!(
+            json_str.contains("\"manifest\":"),
+            "Should have manifest section"
+        );
+        assert!(
+            json_str.contains("\"config\":"),
+            "Should have config section"
+        );
+        assert!(
+            json_str.contains("\"name\": \"minimal-plugin\""),
+            "Should contain plugin name"
+        );
+    }
+
+    #[test]
+    fn test_execution_context_preserves_plugin_args_and_dry_run() {
+        use crate::models::{PluginManifest, PluginMeta, PluginUserConfig};
+        use std::collections::HashMap;
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                registry: None,
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            permissions: None,
+        };
+
+        let user_config = PluginUserConfig::default();
+
+        // Add plugin arguments
+        let mut plugin_args = HashMap::new();
+        plugin_args.insert(
+            "environment".to_string(),
+            toml::Value::String("production".to_string()),
+        );
+        plugin_args.insert("force".to_string(), toml::Value::Boolean(true));
+
+        let ctx = ExecutionContext::from_parts(
+            plugin_args,
+            &manifest,
+            &user_config,
+            HashMap::new(),
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            true, // dry_run = true
+        )
+        .unwrap();
+
+        let json_str = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Verify plugin args are present
+        assert!(
+            json_str.contains("\"environment\": \"production\""),
+            "Should contain plugin args"
+        );
+        assert!(
+            json_str.contains("\"force\": true"),
+            "Should contain boolean plugin args"
+        );
+
+        // Verify dry_run flag
+        assert!(
+            json_str.contains("\"dry_run\": true"),
+            "Should contain dry_run flag"
+        );
+    }
+
+    #[test]
+    fn test_context_passing_integration_with_config_files() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Create .makeitso structure
+        let makeitso_dir = temp_dir.path().join(".makeitso");
+        let plugin_dir = makeitso_dir.join("plugins").join("context-test-plugin");
+        fs::create_dir_all(&plugin_dir).unwrap();
+
+        // Create manifest.toml
+        let manifest_content = r#"
+[plugin]
+name = "context-test-plugin"
+version = "1.5.0"
+description = "Plugin for testing context passing"
+registry = "https://github.com/example/test-plugins.git"
+
+[commands.context-test]
+script = "./context-test.ts"
+description = "Test command for context"
+
+[deno_dependencies]
+std = "https://deno.land/std@0.204.0/path/mod.ts"
+"#;
+        fs::write(plugin_dir.join("manifest.toml"), manifest_content).unwrap();
+
+        // Create config.toml
+        let config_content = r#"
+# User configuration for context test
+database_url = "postgres://localhost/testdb"
+cache_enabled = true
+max_retries = 3
+
+[advanced_settings]
+timeout_ms = 10000
+batch_size = 100
+"#;
+        fs::write(plugin_dir.join("config.toml"), config_content).unwrap();
+
+        // Create the script file
+        fs::write(
+            plugin_dir.join("context-test.ts"),
+            "console.log('Context test script');",
+        )
+        .unwrap();
+
+        // Create mis.toml with project variables
+        let mis_config = r#"
+name = "test-project"
+
+[project_variables]
+project_env = "development"
+api_version = "v2"
+"#;
+        fs::write(makeitso_dir.join("mis.toml"), mis_config).unwrap();
+
+        // Simulate plugin execution with arguments
+        let mut plugin_args = std::collections::HashMap::new();
+        plugin_args.insert("target".to_string(), "production".to_string());
+        plugin_args.insert("verbose".to_string(), "true".to_string());
+
+        // This would normally call run_cmd, but we can't run deno in tests
+        // Instead, let's test the context creation directly by loading the files
+        let manifest_path = plugin_dir.join("manifest.toml");
+        let config_path = plugin_dir.join("config.toml");
+
+        let manifest = crate::config::plugins::load_plugin_manifest(&manifest_path).unwrap();
+        let user_config = crate::config::plugins::load_plugin_user_config(&config_path).unwrap();
+
+        // Load project config
+        let (mis_config, _, _) = crate::config::load_mis_config().unwrap();
+
+        // Convert plugin args to TOML format
+        let plugin_args_toml: HashMap<String, toml::Value> = plugin_args
+            .into_iter()
+            .map(|(k, v)| (k, toml::Value::String(v)))
+            .collect();
+
+        // Create execution context
+        let ctx = ExecutionContext::from_parts(
+            plugin_args_toml,
+            &manifest,
+            &user_config,
+            mis_config.project_variables,
+            temp_dir.path().to_string_lossy().to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        // Serialize and verify the complete context
+        let json_str = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Verify all data sources are present
+        assert!(
+            json_str.contains("\"name\": \"context-test-plugin\""),
+            "Should contain manifest data"
+        );
+        assert!(
+            json_str.contains("\"registry\": \"https://github.com/example/test-plugins.git\""),
+            "Should contain registry"
+        );
+        assert!(
+            json_str.contains("\"database_url\": \"postgres://localhost/testdb\""),
+            "Should contain user config"
+        );
+        assert!(
+            json_str.contains("\"cache_enabled\": true"),
+            "Should contain boolean user config"
+        );
+        assert!(
+            json_str.contains("\"project_env\": \"development\""),
+            "Should contain project variables"
+        );
+        assert!(
+            json_str.contains("\"target\": \"production\""),
+            "Should contain plugin arguments"
         );
 
         std::env::set_current_dir(original_dir).unwrap();

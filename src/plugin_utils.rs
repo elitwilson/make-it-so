@@ -1,3 +1,4 @@
+use crate::constants::PLUGIN_MANIFEST_FILE;
 use crate::utils::find_project_root;
 use anyhow::Result;
 use std::fs;
@@ -6,7 +7,8 @@ use std::path::{Path, PathBuf};
 /// Check if a plugin exists in the current project
 pub fn plugin_exists_in_project(plugin_name: &str) -> bool {
     let plugin_path = Path::new(".makeitso/plugins").join(plugin_name);
-    plugin_path.exists() && plugin_path.is_dir()
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
+    plugin_path.exists() && plugin_path.is_dir() && manifest_path.exists()
 }
 
 /// Get the path to a plugin directory, ensuring it exists
@@ -23,26 +25,24 @@ pub fn get_plugin_path(plugin_name: &str) -> Result<PathBuf> {
 
     let plugin_path = root.join(".makeitso/plugins").join(plugin_name);
 
-    if !plugin_path.exists() {
+    if !plugin_path.exists() || !plugin_path.is_dir() {
+        let available_plugins = list_available_plugins()?;
         anyhow::bail!(
             "🛑 Plugin '{}' not found in .makeitso/plugins.\n\
              → Available plugins: {}\n\
-             → To install a plugin, run `mis add {}`\n\
-             → To create a plugin, run `mis create {}`",
+             → Run `mis add {}` to install it.",
             plugin_name,
-            list_available_plugins()?,
-            plugin_name,
+            available_plugins,
             plugin_name
         );
     }
 
-    // Check for plugin.toml to ensure it's a valid plugin
-    let manifest_path = plugin_path.join("plugin.toml");
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
     if !manifest_path.exists() {
         anyhow::bail!(
-            "🛑 plugin.toml not found for plugin '{}'.\n\
+            "🛑 manifest.toml not found for plugin '{}'.\n\
              → Expected to find: {}\n\
-             → The plugin may be corrupted.",
+             → The plugin may be corrupted or incomplete.",
             plugin_name,
             manifest_path.display()
         );
@@ -179,6 +179,9 @@ mod tests {
             let plugin_dir = Path::new(".makeitso/plugins/test-plugin");
             fs::create_dir_all(&plugin_dir).unwrap();
 
+            // Create manifest.toml file (required by plugin_exists_in_project)
+            fs::write(plugin_dir.join("manifest.toml"), "# test plugin").unwrap();
+
             let result = plugin_exists_in_project("test-plugin");
             assert!(result);
         });
@@ -226,10 +229,10 @@ mod tests {
     #[test]
     fn test_get_plugin_path_succeeds_when_plugin_exists() {
         run_test_in_temp_dir(|| {
-            // Create .makeitso/plugins/test-plugin directory with plugin.toml
+            // Create .makeitso/plugins/test-plugin directory with manifest.toml
             let plugin_dir = Path::new(".makeitso/plugins/test-plugin");
             fs::create_dir_all(&plugin_dir).unwrap();
-            fs::write(plugin_dir.join("plugin.toml"), "# test plugin").unwrap();
+            fs::write(plugin_dir.join("manifest.toml"), "# test plugin").unwrap();
 
             let result = get_plugin_path("test-plugin");
             assert!(result.is_ok());
@@ -266,7 +269,11 @@ mod tests {
     fn test_ensure_plugin_does_not_exist_fails_when_plugin_exists_without_force() {
         run_test_in_temp_dir(|| {
             // Create .makeitso/plugins/test-plugin directory
-            fs::create_dir_all(".makeitso/plugins/test-plugin").unwrap();
+            let plugin_dir = Path::new(".makeitso/plugins/test-plugin");
+            fs::create_dir_all(&plugin_dir).unwrap();
+
+            // Create manifest.toml file (required by plugin_exists_in_project)
+            fs::write(plugin_dir.join("manifest.toml"), "# test plugin").unwrap();
 
             let result = ensure_plugin_does_not_exist("test-plugin", false);
             assert!(result.is_err());

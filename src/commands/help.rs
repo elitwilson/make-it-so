@@ -157,13 +157,9 @@ pub fn show_help(plugin_command: &str) -> Result<()> {
     );
     println!();
 
-    // Plugin configuration hint
-    if plugin_manifest.user_config.is_some() {
-        println!(
-            "⚙️  This plugin uses custom configuration from the [user_config] section in plugin.toml"
-        );
-        println!();
-    }
+    // Plugin configuration hint - Note: config is now in config.toml
+    println!("Plugin configuration can be customized in config.toml");
+    println!();
 
     // Dependencies information
     if !plugin_manifest.deno_dependencies.is_empty() {
@@ -225,7 +221,7 @@ pub fn show_all_plugins() -> Result<()> {
                         }
                     }
                 } else {
-                    println!("⚠️  Warning: Plugin '{}' missing plugin.toml", name);
+                    println!("⚠️  Warning: Plugin '{}' missing manifest.toml", name);
                 }
             }
         }
@@ -305,10 +301,10 @@ fn validate_plugin_exists(plugin_name: &str) -> Result<PathBuf> {
         );
     }
 
-    let manifest_path = plugin_path.join("plugin.toml");
+    let manifest_path = plugin_path.join(PLUGIN_MANIFEST_FILE);
     if !manifest_path.exists() {
         anyhow::bail!(
-            "🛑 plugin.toml not found for plugin '{}'.\n\
+            "🛑 manifest.toml not found for plugin '{}'.\n\
              → Expected to find: {}\n\
              → The plugin may be corrupted.",
             plugin_name,

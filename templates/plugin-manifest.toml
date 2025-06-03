@@ -6,12 +6,12 @@ description = "A plugin scaffolded by Make It So."
 
 # 👇 Plugin-level security permissions (inherited by all commands)
 # Remove or modify these based on what your plugin actually needs
-# [plugin.permissions]
-# file_read = ["./config", "./data"]          # Additional files your plugin can read
-# file_write = ["./output", "./logs"]         # Additional files your plugin can write  
-# network = ["api.github.com"]                # Domains your plugin can access
-# run_commands = ["git", "npm"]               # Commands your plugin can execute
-# env_access = true                           # Whether to allow environment variable access
+[permissions]
+file_read = ["./config", "./data"]  # Additional files your plugin can read
+file_write = ["./output", "./logs"] # Additional files your plugin can write  
+network = ["api.github.com"]        # Domains your plugin can access
+run_commands = ["git", "npm"]       # Commands your plugin can execute
+env_access = true                   # Whether to allow environment variable access
 
 # 👇 These are the CLI commands this plugin supports
 [commands.moo]
@@ -23,9 +23,9 @@ script = "./examples.ts"
 message = { description = "Custom message to display", arg_type = "string" }
 
 # 👇 Command-specific security permissions (extends plugin permissions)
-# [commands.moo.permissions]
-# network = ["cowsay-api.example.com"]        # Add network access for this command only
-# run_commands = ["cowsay"]                   # Add command execution for this command only
+[commands.moo.permissions]
+network = ["cowsay-api.example.com"] # Add network access for this command only
+run_commands = ["cowsay"]            # Add command execution for this command only
 
 # 👇 These are any external dependencies your plugin needs
 [deno_dependencies]
@@ -33,7 +33,11 @@ message = { description = "Custom message to display", arg_type = "string" }
 # Example: using `cowsay` to print a message
 cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
 
-# 👇 Everything below here is YOUR plugin-specific config that you can access in .ts via the ctx variable.
-[user_config]
-# Message to print out — this config is passed into your plugin via ctx.config
-message = "Make It So 🪄"
+# 🔧 USER CONFIGURATION
+# User-editable configuration is now stored in config.toml (separate file)
+# This allows users to customize plugin behavior without modifying this manifest.
+# 
+# Example config.toml:
+# message = "Make It So 🪄"
+# theme = "dark"
+# timeout = 30

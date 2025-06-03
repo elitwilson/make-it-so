@@ -5,6 +5,15 @@
  * to interface with the plugin runtime.
  *
  * Any changes to this file may break plugin functionality.
+ *
+ * PLUGIN CONTEXT STRUCTURE:
+ * - ctx.manifest: Plugin metadata from manifest.toml (name, version, commands, dependencies, registry)
+ * - ctx.config: User-editable configuration from config.toml (your custom settings)
+ * - ctx.plugin_args: CLI arguments passed by the user (--arg=value)
+ * - ctx.project_variables: Project-level variables from mis.toml
+ * - ctx.meta: Quick access to plugin metadata (same as ctx.manifest.plugin)
+ * - ctx.project_root: Absolute path to the project root
+ * - ctx.dry_run: Whether this is a dry-run execution
  */
 
 import type { PluginContext, PluginResult } from "./mis-types.d.ts";
@@ -17,14 +26,89 @@ async function loadContext(): Promise<PluginContext> {
   return JSON.parse(value || "") as PluginContext;
 }
 
+/**
+ * Helper: Get a value from user config.toml with optional default
+ *
+ * @example
+ * const apiKey = getConfig(ctx, "api_key", "default-key");
+ * const timeout = getConfig(ctx, "timeout", 30);
+ */
+function getConfig<T = unknown>(
+  ctx: PluginContext,
+  key: string,
+  defaultValue?: T,
+): T {
+  return (ctx.user_config[key] as T) ?? (defaultValue as T);
+}
+
+/**
+ * Helper: Get a CLI argument with optional default
+ *
+ * @example
+ * const environment = getArg(ctx, "environment", "staging");
+ * const force = getArg(ctx, "force", false);
+ */
+function getArg<T = unknown>(
+  ctx: PluginContext,
+  key: string,
+  defaultValue?: T,
+): T {
+  return (ctx.plugin_args[key] as T) ?? (defaultValue as T);
+}
+
+/**
+ * Helper: Get a project variable with optional default
+ *
+ * @example
+ * const projectName = getProjectVar(ctx, "name", "unnamed-project");
+ */
+function getProjectVar<T = unknown>(
+  ctx: PluginContext,
+  key: string,
+  defaultValue?: T,
+): T {
+  return (ctx.project_variables[key] as T) ?? (defaultValue as T);
+}
+
+/**
+ * Helper: Check if this plugin has a specific Deno dependency
+ *
+ * @example
+ * if (hasDependency(ctx, "oak")) {
+ *   // Use oak framework
+ * }
+ */
+function hasDependency(ctx: PluginContext, dependencyName: string): boolean {
+  return dependencyName in ctx.manifest.deno_dependencies;
+}
+
+/**
+ * Helper: Get the URL for a Deno dependency
+ *
+ * @example
+ * const oakUrl = getDependencyUrl(ctx, "oak");
+ * if (oakUrl) {
+ *   console.log(`Using Oak from: ${oakUrl}`);
+ * }
+ */
+function getDependencyUrl(
+  ctx: PluginContext,
+  dependencyName: string,
+): string | undefined {
+  return ctx.manifest.deno_dependencies[dependencyName];
+}
 
 async function runPlugin<T = unknown>(
   command: string,
   args: Record<string, unknown> = {},
-  options: { debug?: boolean } = {}
+  options: { debug?: boolean } = {},
 ): Promise<PluginResult> {
   const proc = new Deno.Command("mis", {
-    args: ["run", command, ...Object.entries(args).flatMap(([k, v]) => [`--${k}`, String(v)])],
+    args: [
+      "run",
+      command,
+      ...Object.entries(args).flatMap(([k, v]) => [`--${k}`, String(v)]),
+    ],
     stdout: "piped",
     stderr: "piped",
   });
@@ -33,7 +117,13 @@ async function runPlugin<T = unknown>(
   const debug = options.debug || Deno.env.get("MIS_DEBUG") === "true";
 
   if (debug) {
-    console.error(`🔍 Running: mis run ${command} ${Object.entries(args).flatMap(([k, v]) => [`--${k}`, String(v)]).join(' ')}`);
+    console.error(
+      `🔍 Running: mis run ${command} ${
+        Object.entries(args).flatMap(([k, v]) => [`--${k}`, String(v)]).join(
+          " ",
+        )
+      }`,
+    );
   }
 
   const { code, stdout, stderr } = await proc.output();
@@ -49,7 +139,8 @@ async function runPlugin<T = unknown>(
   if (code !== 0) {
     return {
       success: false,
-      error: `Plugin '${command}' failed with exit code ${code}:\n${errorOutput}`,
+      error:
+        `Plugin '${command}' failed with exit code ${code}:\n${errorOutput}`,
     };
   }
 
@@ -65,7 +156,10 @@ async function runPlugin<T = unknown>(
   } catch (err) {
     return {
       success: false,
-      error: `Plugin '${command}' returned invalid JSON.\n\nFull output:\n${output}\n\nParse error: ${err instanceof Error ? err.message : String(err)}`,
+      error:
+        `Plugin '${command}' returned invalid JSON.\n\nFull output:\n${output}\n\nParse error: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
     };
   }
 }
@@ -77,23 +171,31 @@ async function runPlugin<T = unknown>(
 async function runPluginSafe<T = unknown>(
   command: string,
   args: Record<string, unknown> = {},
-  options: { debug?: boolean } = {}
+  options: { debug?: boolean } = {},
 ): Promise<T> {
   const result = await runPlugin<T>(command, args, options);
 
   if (!result.success) {
-    console.log(JSON.stringify({
-      success: false,
-      error: `Plugin '${command}' failed: ${result.error}`
-    }, null, 2));
+    console.log(JSON.stringify(
+      {
+        success: false,
+        error: `Plugin '${command}' failed: ${result.error}`,
+      },
+      null,
+      2,
+    ));
     Deno.exit(1);
   }
 
   if (!result.data) {
-    console.log(JSON.stringify({
-      success: false,
-      error: `Plugin '${command}' returned no data`
-    }, null, 2));
+    console.log(JSON.stringify(
+      {
+        success: false,
+        error: `Plugin '${command}' returned no data`,
+      },
+      null,
+      2,
+    ));
     Deno.exit(1);
   }
 
@@ -107,10 +209,12 @@ async function runPluginSafe<T = unknown>(
 async function composePlugins<T = unknown>(
   steps: Array<{
     plugin: string;
-    args?: Record<string, unknown> | ((previousResult: unknown) => Record<string, unknown>);
+    args?:
+      | Record<string, unknown>
+      | ((previousResult: unknown) => Record<string, unknown>);
     transform?: (result: unknown) => unknown;
   }>,
-  options: { debug?: boolean } = {}
+  options: { debug?: boolean } = {},
 ): Promise<T> {
   let previousResult: unknown = null;
   let finalResult: unknown = null;
@@ -120,7 +224,7 @@ async function composePlugins<T = unknown>(
 
     // Calculate args for this step
     let stepArgs: Record<string, unknown> = {};
-    if (typeof step.args === 'function') {
+    if (typeof step.args === "function") {
       stepArgs = step.args(previousResult);
     } else if (step.args) {
       stepArgs = step.args;
@@ -153,14 +257,14 @@ async function composePluginsWithContext(
     transform?: (result: PluginResult) => PluginResult;
   }>,
   options: {
-    debug?: boolean,
-    pluginResolver?: (pluginName: string, projectRoot: string) => string
-  } = {}
+    debug?: boolean;
+    pluginResolver?: (pluginName: string, projectRoot: string) => string;
+  } = {},
 ): Promise<PluginContext> {
   // Initialize results array if not present
   let enrichedContext: PluginContext = {
     ...context,
-    results: context.results || []
+    results: context.results || [],
   };
 
   const resolver = options.pluginResolver || defaultPluginResolver;
@@ -181,14 +285,16 @@ async function composePluginsWithContext(
       stdin: "piped",
       stdout: "piped",
       stderr: "piped",
-      cwd: context.project_root // Always use context.project_root - no ambiguity
+      cwd: context.project_root, // Always use context.project_root - no ambiguity
     });
 
     const child = proc.spawn();
 
     // Send enriched context to plugin via stdin
     const writer = child.stdin.getWriter();
-    await writer.write(new TextEncoder().encode(JSON.stringify(enrichedContext)));
+    await writer.write(
+      new TextEncoder().encode(JSON.stringify(enrichedContext)),
+    );
     await writer.close();
 
     const { code, stdout, stderr } = await child.output();
@@ -218,7 +324,7 @@ async function composePluginsWithContext(
         success: finalResult.success,
         data: finalResult.success ? finalResult.data : undefined,
         error: finalResult.success ? undefined : finalResult.error,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       // If this plugin updated the context, merge those changes
@@ -226,27 +332,36 @@ async function composePluginsWithContext(
         enrichedContext = {
           ...enrichedContext,
           ...finalResult.context,
-          results: enrichedContext.results // Keep our accumulated results
+          results: enrichedContext.results, // Keep our accumulated results
         };
       }
-
     } catch (err) {
-      throw new Error(`Plugin '${step.plugin}' returned invalid JSON: ${err instanceof Error ? err.message : String(err)}\n\nFull output:\n${output}`);
+      throw new Error(
+        `Plugin '${step.plugin}' returned invalid JSON: ${
+          err instanceof Error ? err.message : String(err)
+        }\n\nFull output:\n${output}`,
+      );
     }
   }
 
   return enrichedContext;
 }
 
-function assertRequiredArgs(_args: Record<string, unknown>, _requiredArgs: string[]) {
+function assertRequiredArgs(
+  _args: Record<string, unknown>,
+  _requiredArgs: string[],
+) {
   // TODO: Implement argument validation
 }
 
 /**
  * Default plugin path resolver - can be overridden for custom plugin layouts
  */
-function defaultPluginResolver(pluginName: string, projectRoot: string): string {
-  return `${projectRoot}/.makeitso/plugins/${pluginName.replace(':', '/')}.ts`;
+function defaultPluginResolver(
+  pluginName: string,
+  projectRoot: string,
+): string {
+  return `${projectRoot}/.makeitso/plugins/${pluginName.replace(":", "/")}.ts`;
 }
 
 /**
@@ -254,7 +369,7 @@ function defaultPluginResolver(pluginName: string, projectRoot: string): string 
  * Handles cases where plugins output debug info followed by result JSON.
  */
 function extractFinalJson(output: string): unknown {
-  const lines = output.trim().split('\n');
+  const lines = output.trim().split("\n");
 
   // Try to find the last complete JSON object
   for (let i = lines.length - 1; i >= 0; i--) {
@@ -264,12 +379,12 @@ function extractFinalJson(output: string): unknown {
     if (!line) continue;
 
     // Try parsing this line as JSON
-    if (line.startsWith('{')) {
+    if (line.startsWith("{")) {
       try {
         return JSON.parse(line);
       } catch {
         // Try parsing from this line to the end (multi-line JSON)
-        const remainingLines = lines.slice(i).join('\n').trim();
+        const remainingLines = lines.slice(i).join("\n").trim();
         try {
           return JSON.parse(remainingLines);
         } catch {
@@ -291,12 +406,19 @@ function extractFinalJson(output: string): unknown {
  * Output a successful plugin result and exit.
  * Makes plugin development braindead simple - no JSON boilerplate needed!
  */
-function outputSuccess(data: Record<string, unknown>, context?: PluginContext): never {
-  console.log(JSON.stringify({
-    success: true,
-    data,
-    ...(context ? { context } : {})
-  }, null, 2));
+function outputSuccess(
+  data: Record<string, unknown>,
+  context?: PluginContext,
+): never {
+  console.log(JSON.stringify(
+    {
+      success: true,
+      data,
+      ...(context ? { context } : {}),
+    },
+    null,
+    2,
+  ));
   Deno.exit(0);
 }
 
@@ -305,11 +427,15 @@ function outputSuccess(data: Record<string, unknown>, context?: PluginContext): 
  * Makes error handling braindead simple - no JSON boilerplate needed!
  */
 function outputError(error: string, context?: PluginContext): never {
-  console.log(JSON.stringify({
-    success: false,
-    error,
-    ...(context ? { context } : {})
-  }, null, 2));
+  console.log(JSON.stringify(
+    {
+      success: false,
+      error,
+      ...(context ? { context } : {}),
+    },
+    null,
+    2,
+  ));
   Deno.exit(1);
 }
 
@@ -325,4 +451,9 @@ export const mis = {
   extractFinalJson,
   outputSuccess,
   outputError,
-}
+  getConfig,
+  getArg,
+  getProjectVar,
+  hasDependency,
+  getDependencyUrl,
+};

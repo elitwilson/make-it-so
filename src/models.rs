@@ -30,8 +30,8 @@ pub struct EnvConfig {
     pub extra: HashMap<String, TomlValue>,
 }
 
-/// Security permissions that can be declared in plugin.toml
-#[derive(Debug, Deserialize, Default, Clone)]
+/// Security permissions that can be declared in manifest.toml
+#[derive(Debug, Deserialize, Serialize, Default, Clone)]
 pub struct SecurityPermissions {
     /// File paths that can be read (relative to project root or absolute)
     #[serde(default)]
@@ -57,7 +57,8 @@ pub struct SecurityPermissions {
 #[derive(Serialize)]
 pub struct ExecutionContext {
     pub plugin_args: HashMap<String, TomlValue>,
-    pub config: JsonValue,            // <-- plugin-specific config
+    pub manifest: JsonValue,          // <-- plugin manifest data
+    pub config: JsonValue,            // <-- user-editable config
     pub project_variables: JsonValue, // <-- project-scoped variables
     pub project_root: String,
     pub meta: PluginMeta,
@@ -66,30 +67,35 @@ pub struct ExecutionContext {
     // pub log: Option<()>, // ignored during serialization
 }
 
-#[derive(Debug, Deserialize)]
+/// Plugin manifest (manifest.toml) - defines plugin structure and metadata
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PluginManifest {
     pub plugin: PluginMeta,
+    #[serde(default)]
     pub commands: HashMap<String, PluginCommand>,
-
     #[serde(default)]
-    pub deno_dependencies: HashMap<String, String>, // name -> URL
-
-    #[serde(default)]
-    pub user_config: Option<TomlValue>,
-
-    /// Plugin-level security permissions (inherited by all commands)
+    pub deno_dependencies: HashMap<String, String>,
     #[serde(default)]
     pub permissions: Option<SecurityPermissions>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+/// User configuration (config.toml) - user-editable project-specific config
+#[derive(Debug, Deserialize, Default, Clone)]
+pub struct PluginUserConfig {
+    #[serde(flatten)]
+    pub config: HashMap<String, TomlValue>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PluginMeta {
     pub name: String,
     pub description: Option<String>,
     pub version: String,
+    #[serde(default)]
+    pub registry: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct PluginCommand {
     pub script: String,
 
@@ -107,7 +113,7 @@ pub struct PluginCommand {
     pub permissions: Option<SecurityPermissions>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CommandArgs {
     #[serde(default)]
     pub required: HashMap<String, ArgDefinition>,
@@ -116,7 +122,7 @@ pub struct CommandArgs {
     pub optional: HashMap<String, ArgDefinition>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct ArgDefinition {
     pub description: String,
 
@@ -127,7 +133,7 @@ pub struct ArgDefinition {
     pub default_value: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ArgType {
     #[default]
@@ -140,18 +146,29 @@ pub enum ArgType {
 impl ExecutionContext {
     pub fn from_parts(
         args: HashMap<String, TomlValue>,
-        plugin_user_config: Option<TomlValue>,
+        plugin_manifest: &PluginManifest,
+        plugin_user_config: &PluginUserConfig,
         project_variables: HashMap<String, TomlValue>,
         project_root: String,
         meta: PluginMeta,
         dry_run: bool,
     ) -> anyhow::Result<Self> {
-        // 1) plugin config (TOML) → JSON
-        let plugin_toml =
-            plugin_user_config.unwrap_or_else(|| TomlValue::Table(toml::map::Map::new()));
-        let plugin_config_json: JsonValue = toml_to_json(plugin_toml);
+        // Convert manifest data to JSON (excluding sensitive internal data)
+        // ToDo: Revisit this and check if we can move instead of clone
+        let manifest_data = ManifestData {
+            plugin: plugin_manifest.plugin.clone(),
+            commands: plugin_manifest.commands.keys().cloned().collect(),
+            deno_dependencies: plugin_manifest.deno_dependencies.clone(),
+            registry: plugin_manifest.plugin.registry.clone(),
+        };
+        let manifest_json: JsonValue = serde_json::to_value(manifest_data)?;
 
-        // 2) project vars (flat map) → TOML table → JSON
+        // Convert user config to JSON
+        let user_config_json: JsonValue = toml_to_json(TomlValue::Table(
+            plugin_user_config.config.clone().into_iter().collect(),
+        ));
+
+        // Convert project vars to JSON
         let mut vars_table = toml::map::Map::new();
         for (k, v) in project_variables {
             vars_table.insert(k, v);
@@ -160,14 +177,23 @@ impl ExecutionContext {
 
         Ok(Self {
             plugin_args: args,
-            config: plugin_config_json,
+            manifest: manifest_json,
+            config: user_config_json,
             project_variables: project_vars_json,
             project_root,
             meta,
             dry_run,
-            // log: None,
         })
     }
+}
+
+/// Subset of manifest data exposed to plugins (excludes sensitive permissions data)
+#[derive(Debug, Serialize)]
+struct ManifestData {
+    pub plugin: PluginMeta,
+    pub commands: Vec<String>, // Just command names, not full definitions
+    pub deno_dependencies: HashMap<String, String>,
+    pub registry: Option<String>,
 }
 
 // ToDo: Move this to a utility module
@@ -291,7 +317,10 @@ script = "./test.ts"
             manifest.deno_dependencies.is_empty(),
             "Deno dependencies should be empty"
         );
-        assert!(manifest.user_config.is_none(), "User config should be None");
+        assert!(
+            manifest.plugin.registry.is_none(),
+            "Registry should be None"
+        );
     }
 
     #[test]
@@ -603,5 +632,48 @@ std = "https://deno.land/std@0.204.0/path/mod.ts"
             manifest.deno_dependencies["oak"],
             "https://deno.land/x/oak@v12.6.1/mod.ts"
         );
+    }
+
+    #[test]
+    fn test_plugin_manifest_parsing_with_registry_field() {
+        let toml_with_registry = r#"
+[plugin]
+name = "registry-plugin"
+version = "1.5.0"
+description = "Plugin with registry field"
+registry = "https://github.com/user/registry-plugins.git"
+
+[commands.test]
+script = "./test.ts"
+description = "Test command"
+
+[deno_dependencies]
+std = "https://deno.land/std@0.204.0/path/mod.ts"
+"#;
+
+        let manifest: Result<PluginManifest, _> = toml::from_str(toml_with_registry);
+        assert!(
+            manifest.is_ok(),
+            "Manifest with registry should parse successfully"
+        );
+
+        let manifest = manifest.unwrap();
+        assert_eq!(manifest.plugin.name, "registry-plugin");
+        assert_eq!(manifest.plugin.version, "1.5.0");
+
+        // Check that registry field is populated
+        assert!(
+            manifest.plugin.registry.is_some(),
+            "Registry field should be Some"
+        );
+        assert_eq!(
+            manifest.plugin.registry.unwrap(),
+            "https://github.com/user/registry-plugins.git",
+            "Registry should match the value in TOML"
+        );
+
+        // Check other fields work as expected
+        assert!(manifest.commands.contains_key("test"));
+        assert!(!manifest.deno_dependencies.is_empty());
     }
 }

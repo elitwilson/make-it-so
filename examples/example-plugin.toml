@@ -80,8 +80,15 @@ script = "./health.ts"
 cliffy = "https://deno.land/x/cliffy@v1.0.0-rc.3/mod.ts"
 zod = "https://deno.land/x/zod@v3.22.4/mod.ts"
 
-# Plugin-specific configuration
-[user_config]
-default_environment = "staging"
-max_replicas = 10
-notification_webhook = "https://hooks.slack.com/services/..."
+# 🔧 USER CONFIGURATION
+# User-editable configuration is now stored in config.toml (separate file)
+# This allows users to customize plugin behavior without modifying this manifest.
+# 
+# Example config.toml for this plugin:
+# default_environment = "staging"
+# max_replicas = 10
+# notification_webhook = "https://hooks.slack.com/services/..."
+# 
+# [api_endpoints]
+# monitoring = "https://monitoring.company.com"
+# deployment = "https://deploy.company.com"

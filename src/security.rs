@@ -742,10 +742,10 @@ mod tests {
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands: HashMap::new(),
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(plugin_permissions),
         };
 
@@ -809,10 +809,10 @@ mod tests {
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands,
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(plugin_permissions),
         };
 
@@ -866,10 +866,10 @@ mod tests {
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands,
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(plugin_permissions),
         };
 
@@ -911,10 +911,10 @@ mod tests {
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands,
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: None, // No plugin-level permissions
         };
 
@@ -949,10 +949,10 @@ mod tests {
                 name: "malicious-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands: HashMap::new(),
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(dangerous_permissions),
         };
 
@@ -1371,10 +1371,10 @@ script = "./test.ts"
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands,
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(plugin_permissions),
         };
 
@@ -1465,10 +1465,10 @@ script = "./test.ts"
                 name: "test-plugin".to_string(),
                 description: None,
                 version: "1.0.0".to_string(),
+                registry: None,
             },
             commands: HashMap::new(), // No commands defined
             deno_dependencies: HashMap::new(),
-            user_config: None,
             permissions: Some(plugin_permissions),
         };
 

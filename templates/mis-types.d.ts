@@ -10,14 +10,11 @@
 
 export type PluginContext = {
   plugin_args: Record<string, unknown>;
-  config: Record<string, unknown>;
-  project_variables?: Record<string, unknown>;
+  manifest: PluginManifest; // Plugin metadata (from manifest.toml)
+  user_config: Record<string, unknown>; // User configuration (from config.toml)
+  project_variables: Record<string, unknown>; // Project-level variables
   project_root: string;
-  meta?: {
-    name: string;
-    description: string;
-    version: string;
-  };
+  meta: PluginMeta;
   dry_run: boolean;
   results?: Array<{
     plugin: string;
@@ -26,6 +23,20 @@ export type PluginContext = {
     error?: string;
     timestamp?: string;
   }>;
+};
+
+export type PluginManifest = {
+  plugin: PluginMeta;
+  commands: string[]; // Available command names
+  deno_dependencies: Record<string, string>;
+  registry?: string; // Registry URL where plugin was installed from
+};
+
+export type PluginMeta = {
+  name: string;
+  description?: string;
+  version: string;
+  registry?: string;
 };
 
 export type PluginResult =
