@@ -7,7 +7,7 @@ version = "2.1.0"
 description = "Manages deployments with comprehensive argument validation"
 
 # Plugin-level security permissions (inherited by all commands)
-[plugin.permissions]
+[permissions]
 file_read = [
   "./config",
   "./deployment",

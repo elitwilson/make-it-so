@@ -7,7 +7,7 @@
  * Any changes to this file may break plugin functionality.
  */
 
-import { PluginContext, PluginResult } from "./mis-types.d.ts";
+import type { PluginContext, PluginResult } from "./mis-types.d.ts";
 
 async function loadContext(): Promise<PluginContext> {
   const reader = Deno.stdin.readable
@@ -56,11 +56,11 @@ async function runPlugin<T = unknown>(
   try {
     // Extract the final JSON result from potentially mixed output
     const result = extractFinalJson(output);
-    
+
     if (debug) {
       console.error(`🔍 Parsed JSON: ${JSON.stringify(result)}`);
     }
-    
+
     return result as PluginResult;
   } catch (err) {
     return {
@@ -117,7 +117,7 @@ async function composePlugins<T = unknown>(
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    
+
     // Calculate args for this step
     let stepArgs: Record<string, unknown> = {};
     if (typeof step.args === 'function') {
@@ -132,7 +132,7 @@ async function composePlugins<T = unknown>(
 
     // Run the plugin
     const result = await runPluginSafe(step.plugin, stepArgs, options);
-    
+
     // Transform result if needed
     finalResult = step.transform ? step.transform(result) : result;
     previousResult = finalResult;
@@ -152,7 +152,7 @@ async function composePluginsWithContext(
     plugin: string;
     transform?: (result: PluginResult) => PluginResult;
   }>,
-  options: { 
+  options: {
     debug?: boolean,
     pluginResolver?: (pluginName: string, projectRoot: string) => string
   } = {}
@@ -167,7 +167,7 @@ async function composePluginsWithContext(
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
-    
+
     if (options.debug || Deno.env.get("MIS_DEBUG") === "true") {
       console.error(`🔍 Step ${i + 1}/${steps.length}: ${step.plugin}`);
     }
@@ -179,39 +179,39 @@ async function composePluginsWithContext(
     const proc = new Deno.Command("deno", {
       args: ["run", "--allow-run", "--allow-env", pluginPath],
       stdin: "piped",
-      stdout: "piped", 
+      stdout: "piped",
       stderr: "piped",
       cwd: context.project_root // Always use context.project_root - no ambiguity
     });
-    
+
     const child = proc.spawn();
-    
+
     // Send enriched context to plugin via stdin
     const writer = child.stdin.getWriter();
     await writer.write(new TextEncoder().encode(JSON.stringify(enrichedContext)));
     await writer.close();
-    
+
     const { code, stdout, stderr } = await child.output();
-    
+
     if (code !== 0) {
       const errorOutput = new TextDecoder().decode(stderr);
       throw new Error(`Plugin '${step.plugin}' failed: ${errorOutput}`);
     }
-    
+
     const output = new TextDecoder().decode(stdout);
-    
+
     if (options.debug || Deno.env.get("MIS_DEBUG") === "true") {
       console.error(`🔍 Plugin output: ${output}`);
       console.error(`🔍 Plugin stderr: ${new TextDecoder().decode(stderr)}`);
     }
-    
+
     // Parse the plugin result using robust JSON extraction
     try {
       const result = extractFinalJson(output) as PluginResult;
-      
+
       // Transform result if needed
       const finalResult = step.transform ? step.transform(result) : result;
-      
+
       // Accumulate the result in the context
       enrichedContext.results!.push({
         plugin: step.plugin,
@@ -220,7 +220,7 @@ async function composePluginsWithContext(
         error: finalResult.success ? undefined : finalResult.error,
         timestamp: new Date().toISOString()
       });
-      
+
       // If this plugin updated the context, merge those changes
       if (finalResult.success && finalResult.context) {
         enrichedContext = {
@@ -229,7 +229,7 @@ async function composePluginsWithContext(
           results: enrichedContext.results // Keep our accumulated results
         };
       }
-      
+
     } catch (err) {
       throw new Error(`Plugin '${step.plugin}' returned invalid JSON: ${err instanceof Error ? err.message : String(err)}\n\nFull output:\n${output}`);
     }
@@ -255,14 +255,14 @@ function defaultPluginResolver(pluginName: string, projectRoot: string): string 
  */
 function extractFinalJson(output: string): unknown {
   const lines = output.trim().split('\n');
-  
+
   // Try to find the last complete JSON object
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim();
-    
+
     // Skip empty lines
     if (!line) continue;
-    
+
     // Try parsing this line as JSON
     if (line.startsWith('{')) {
       try {
@@ -278,7 +278,7 @@ function extractFinalJson(output: string): unknown {
       }
     }
   }
-  
+
   // Fallback: try parsing the entire output
   try {
     return JSON.parse(output.trim());
