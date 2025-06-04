@@ -17,11 +17,11 @@ registry = ""                                      # Optional: a remote registry
 # These apply to all commands unless overridden individually.
 # -----------------------------
 [permissions]
-file_read = []     # Paths your plugin can read from (e.g. ["./data"])
-file_write = []    # Paths your plugin can write to (e.g. ["./logs"])
-network = []       # Domains your plugin can access (e.g. ["api.github.com"])
-run_commands = []  # Shell commands allowed to run (e.g. ["git", "npm"])
-env_access = false # Allow reading environment variables
+# file_read = []     # Paths your plugin can read from (e.g. ["./data"])
+# file_write = []    # Paths your plugin can write to (e.g. ["./logs"])
+# network = []       # Domains your plugin can access (e.g. ["api.github.com"])
+# run_commands = []  # Shell commands allowed to run (e.g. ["git", "npm"])
+# env_access = false # Allow reading environment variables
 
 # -----------------------------
 # CLI Commands
@@ -33,14 +33,14 @@ env_access = false # Allow reading environment variables
 description = "Moo!!!!"
 script = "./examples.ts" # Path to the script file executed for this command
 
-# Optional CLI arguments
+# Optional CLI arguments (e.g. `mis moo --message "Hello, world!"`)
 [commands.moo.args.optional]
 message = { description = "Custom message to display", arg_type = "string" }
 
 # Command-specific permissions (extends or overrides top-level)
 [commands.moo.permissions]
-network = ["cowsay-api.example.com"]
-run_commands = ["cowsay"]
+# network = ["cowsay-api.example.com"]
+# run_commands = ["cowsay"]
 
 # -----------------------------
 # External Deno Dependencies

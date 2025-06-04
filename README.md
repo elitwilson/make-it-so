@@ -1,5 +1,10 @@
 # Make It So
 
+> ⚠️ **Project Status: Alpha**\
+> This project is in active development. Expect breaking changes as APIs and
+> features evolve.\
+> Feedback and contributions are welcome!
+
 **Make It So** is a CLI framework that lets you build your own project-specific
 CLI commands using TypeScript plugins powered by Deno.
 
@@ -278,11 +283,11 @@ console.log("project vars:", ctx.project_variables);
 
 ## Planned Features
 
-| Feature                       | Description                                                                                            | Status |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
-| Plugin-scoped security config | Specify Deno sandboxing settings on a plugin level. (Currently set to conservative defaults)           | 🚧 WIP |
-| Plugin Composition/Workflows  | A primary goal of Make It So is to allow for script-chaining via composition for complex workflows     | 🚧 WIP |
-| Full Documentation            | Docs for CLI usage, Typescript plugin API, etc... to come                                              | 🚧 WIP |
+| Feature                       | Description                                                                                        | Status |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
+| Plugin-scoped security config | Specify Deno sandboxing settings on a plugin level. (Currently set to conservative defaults)       | 🚧 WIP |
+| Plugin Composition/Workflows  | A primary goal of Make It So is to allow for script-chaining via composition for complex workflows | 🚧 WIP |
+| Full Documentation            | Docs for CLI usage, Typescript plugin API, etc... to come                                          | 🚧 WIP |
 
 ---
 
