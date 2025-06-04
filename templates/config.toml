@@ -1,43 +1,18 @@
-# 🔧 User Configuration for Make It So Plugin
-# This file contains user-editable settings for your plugin.
-# It's separate from manifest.toml to allow users to customize behavior
-# without modifying the plugin's core metadata.
-#
-# ✅ SAFE TO EDIT: Users can modify this file
-# ❌ DON'T EDIT: manifest.toml (contains plugin metadata)
-#
-# This config is passed to your plugin via ctx.config in TypeScript.
+# config.toml
+# ------------------------------------------------------------
+# User Plugin Configuration for this Make It So Plugin
+# Users can (and should) modify this file according to plugin requirements.
+# Access values in your plugin via `ctx.config.<key>`
 
-# Example configuration values
-message = "Make It So 🪄"
-theme = "dark"
-timeout = 30
-debug = false
+# Sample config (used by the `moo` command):
+message = "Make It So 🪄" # ctx.config.message
 
-# Example nested configuration
-[api_settings]
-base_url = "https://api.example.com"
-timeout = 5000
-retries = 3
+# --- Examples ---
 
-[ui_preferences]
-show_progress = true
-color_output = true
-compact_mode = false
+# [my_section]                 # ctx.config.my_section
+# my_key = "foo"               # ctx.config.my_section.my_key
 
-# Example list configuration
-allowed_environments = ["development", "staging", "production"]
-notification_channels = ["slack", "email"]
-
-# Example plugin-specific settings
-# (These would vary based on your plugin's needs)
-# 
-# For a deployment plugin:
-# default_environment = "staging"
-# max_replicas = 10
-# notification_webhook = "https://hooks.slack.com/services/..."
-#
-# For a code generator plugin:
-# template_style = "modern"
-# include_tests = true
-# target_framework = "deno"
+# my_string = "hello world"    # String
+# my_number = 42               # Number
+# my_boolean = true            # Boolean
+# my_list = ["item1", "item2", "item3"]  # List
