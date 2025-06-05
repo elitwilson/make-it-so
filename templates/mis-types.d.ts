@@ -8,10 +8,25 @@
  * To update it, re-run `mis init` or upgrade your CLI version.
  */
 
-export type PluginContext = {
+/**
+ * Plugin execution context with optional type-safe configuration.
+ *
+ * @template TConfig - User-provided interface matching your config.toml structure for type safety
+ *
+ * @example
+ * // Without typing (backward compatible):
+ * const ctx = await mis.loadContext();
+ *
+ * @example
+ * // With type safety:
+ * interface MyConfig { database: { host: string; }; }
+ * const ctx = await mis.loadContext<MyConfig>();
+ * // ctx.config.database.host is now fully typed!
+ */
+export type PluginContext<TConfig = Record<string, unknown>> = {
   plugin_args: Record<string, unknown>;
   manifest: PluginManifest; // Plugin metadata (from manifest.toml)
-  config: Record<string, unknown>; // User configuration (from config.toml)
+  config: TConfig; // User configuration (from config.toml)
   project_variables: Record<string, unknown>; // Project-level variables
   project_root: string;
   meta: PluginMeta;
@@ -39,14 +54,19 @@ export type PluginMeta = {
   registry?: string;
 };
 
-export type PluginResult =
+export type PluginResult<TConfig = Record<string, unknown>> =
   | {
     success: true;
     data: Record<string, unknown>; // actual payload returned by the plugin
-    context?: PluginContext; // passthrough context for composition
+    context?: PluginContext<TConfig>; // passthrough context for composition
   }
   | {
     success: false;
     error: string; // human-readable message
-    context?: PluginContext; // passthrough context even on failure
+    context?: PluginContext<TConfig>; // passthrough context even on failure
   };
+
+// Helper type for common sectioned config pattern
+export type SectionedConfig<T> = {
+  [K in keyof T]: T[K];
+};

@@ -18,12 +18,14 @@
 
 import type { PluginContext, PluginResult } from "./mis-types.d.ts";
 
-async function loadContext(): Promise<PluginContext> {
+async function loadContext<TConfig = Record<string, unknown>>(): Promise<
+  PluginContext<TConfig>
+> {
   const reader = Deno.stdin.readable
     .pipeThrough(new TextDecoderStream())
     .getReader();
   const { value } = await reader.read();
-  return JSON.parse(value || "") as PluginContext;
+  return JSON.parse(value || "") as PluginContext<TConfig>;
 }
 
 /**
@@ -33,9 +35,9 @@ async function loadContext(): Promise<PluginContext> {
  * const apiKey = getConfig(ctx, "api_key", "default-key");
  * const timeout = getConfig(ctx, "timeout", 30);
  */
-function getConfig<T = unknown>(
-  ctx: PluginContext,
-  key: string,
+function getConfig<TConfig, T = unknown>(
+  ctx: PluginContext<TConfig>,
+  key: keyof TConfig,
   defaultValue?: T,
 ): T {
   return (ctx.config[key] as T) ?? (defaultValue as T);
@@ -48,8 +50,8 @@ function getConfig<T = unknown>(
  * const environment = getArg(ctx, "environment", "staging");
  * const force = getArg(ctx, "force", false);
  */
-function getArg<T = unknown>(
-  ctx: PluginContext,
+function getArg<TConfig, T = unknown>(
+  ctx: PluginContext<TConfig>,
   key: string,
   defaultValue?: T,
 ): T {
@@ -62,8 +64,8 @@ function getArg<T = unknown>(
  * @example
  * const projectName = getProjectVar(ctx, "name", "unnamed-project");
  */
-function getProjectVar<T = unknown>(
-  ctx: PluginContext,
+function getProjectVar<TConfig, T = unknown>(
+  ctx: PluginContext<TConfig>,
   key: string,
   defaultValue?: T,
 ): T {
@@ -78,7 +80,10 @@ function getProjectVar<T = unknown>(
  *   // Use oak framework
  * }
  */
-function hasDependency(ctx: PluginContext, dependencyName: string): boolean {
+function hasDependency<TConfig>(
+  ctx: PluginContext<TConfig>,
+  dependencyName: string,
+): boolean {
   return dependencyName in ctx.manifest.deno_dependencies;
 }
 
@@ -91,18 +96,18 @@ function hasDependency(ctx: PluginContext, dependencyName: string): boolean {
  *   console.log(`Using Oak from: ${oakUrl}`);
  * }
  */
-function getDependencyUrl(
-  ctx: PluginContext,
+function getDependencyUrl<TConfig>(
+  ctx: PluginContext<TConfig>,
   dependencyName: string,
 ): string | undefined {
   return ctx.manifest.deno_dependencies[dependencyName];
 }
 
-async function runPlugin<T = unknown>(
+async function runPlugin<T = unknown, TConfig = Record<string, unknown>>(
   command: string,
   args: Record<string, unknown> = {},
   options: { debug?: boolean } = {},
-): Promise<PluginResult> {
+): Promise<PluginResult<TConfig>> {
   const proc = new Deno.Command("mis", {
     args: [
       "run",
@@ -152,7 +157,7 @@ async function runPlugin<T = unknown>(
       console.error(`🔍 Parsed JSON: ${JSON.stringify(result)}`);
     }
 
-    return result as PluginResult;
+    return result as PluginResult<TConfig>;
   } catch (err) {
     return {
       success: false,
@@ -406,9 +411,9 @@ function extractFinalJson(output: string): unknown {
  * Output a successful plugin result and exit.
  * Makes plugin development braindead simple - no JSON boilerplate needed!
  */
-function outputSuccess(
+function outputSuccess<TConfig = Record<string, unknown>>(
   data: Record<string, unknown>,
-  context?: PluginContext,
+  context?: PluginContext<TConfig>,
 ): never {
   console.log(JSON.stringify(
     {
@@ -426,7 +431,10 @@ function outputSuccess(
  * Output an error plugin result and exit.
  * Makes error handling braindead simple - no JSON boilerplate needed!
  */
-function outputError(error: string, context?: PluginContext): never {
+function outputError<TConfig = Record<string, unknown>>(
+  error: string,
+  context?: PluginContext<TConfig>,
+): never {
   console.log(JSON.stringify(
     {
       success: false,
