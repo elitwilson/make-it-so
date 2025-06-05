@@ -21,11 +21,28 @@ import type { PluginContext, PluginResult } from "./mis-types.d.ts";
 async function loadContext<TConfig = Record<string, unknown>>(): Promise<
   PluginContext<TConfig>
 > {
-  const reader = Deno.stdin.readable
-    .pipeThrough(new TextDecoderStream())
-    .getReader();
-  const { value } = await reader.read();
-  return JSON.parse(value || "") as PluginContext<TConfig>;
+  // Find the context file argument
+  const contextFileIndex = Deno.args.findIndex((arg) =>
+    arg === "--context-file"
+  );
+
+  if (contextFileIndex === -1 || !Deno.args[contextFileIndex + 1]) {
+    throw new Error(
+      "🛑 No context file provided. Expected --context-file <path> argument.\n" +
+        "→ This indicates a bug in the Make It So CLI. Please report this issue.",
+    );
+  }
+
+  const contextFilePath = Deno.args[contextFileIndex + 1];
+
+  try {
+    const contextData = await Deno.readTextFile(contextFilePath);
+    return JSON.parse(contextData) as PluginContext<TConfig>;
+  } catch (error) {
+    throw new Error(
+      `Failed to read context file '${contextFilePath}': ${error}`,
+    );
+  }
 }
 
 /**

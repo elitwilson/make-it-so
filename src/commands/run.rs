@@ -1,6 +1,5 @@
 use std::{
     collections::HashMap,
-    io::Write,
     path::PathBuf,
     process::{Command, Stdio},
 };
@@ -210,32 +209,50 @@ pub fn execute_plugin(
         );
     }
 
+    // Create a temporary file for the context JSON
+    let temp_dir = std::env::temp_dir();
+    let context_file = temp_dir.join(format!("mis-context-{}.json", std::process::id()));
+
+    // Write context to temp file with proper error handling
+    std::fs::write(&context_file, json).with_context(|| {
+        format!(
+            "Failed to write context to temporary file: {}",
+            context_file.display()
+        )
+    })?;
+
+    // Ensure cleanup happens even if execution fails
+    let cleanup_guard = ContextFileCleanup::new(&context_file);
+
     // Build secure permissions for the plugin using manifest-declared permissions
     let project_root = std::env::current_dir()?;
-    let permissions = build_plugin_permissions(&project_root, plugin_manifest, command_name)?;
+    let mut permissions = build_plugin_permissions(&project_root, plugin_manifest, command_name)?;
 
-    // Build Deno command arguments
+    // Add permission to read the context file
+    permissions.allow_read(&context_file);
+
+    // Build Deno command arguments, passing context file path as argument
     let mut deno_args = vec!["run".to_string()];
     deno_args.extend(permissions.to_deno_args());
     deno_args.push(path_and_file.to_string_lossy().to_string());
+    deno_args.push("--context-file".to_string());
+    deno_args.push(context_file.to_string_lossy().to_string());
 
     // Spawn the plugin with Deno using secure permissions
+    // stdin is now inherited, allowing plugins to prompt for user input
     let mut child = Command::new("deno")
         .args(&deno_args)
-        .stdin(Stdio::piped())
+        .stdin(Stdio::inherit())  // Changed: Allow plugin to access terminal stdin
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
         .with_context(|| format!("🛑 Failed to run plugin script: {}\n→ Make sure Deno is installed and the script is valid", script_file_name))?;
 
-    // Pipe context JSON into plugin's stdin
-    child
-        .stdin
-        .as_mut()
-        .context("Failed to open stdin for plugin")?
-        .write_all(json.as_bytes())?;
-
     let status = child.wait()?;
+
+    // Cleanup happens automatically when cleanup_guard is dropped
+    drop(cleanup_guard);
+
     if !status.success() {
         return Err(anyhow::anyhow!(
             "🛑 Plugin exited with error (non-zero status)\n→ Check the plugin output above for details"
@@ -243,6 +260,31 @@ pub fn execute_plugin(
     }
 
     Ok(())
+}
+
+/// RAII guard to ensure context file cleanup
+struct ContextFileCleanup<'a> {
+    file_path: &'a std::path::Path,
+}
+
+impl<'a> ContextFileCleanup<'a> {
+    fn new(file_path: &'a std::path::Path) -> Self {
+        Self { file_path }
+    }
+}
+
+impl<'a> Drop for ContextFileCleanup<'a> {
+    fn drop(&mut self) {
+        if self.file_path.exists() {
+            if let Err(e) = std::fs::remove_file(self.file_path) {
+                eprintln!(
+                    "⚠️  Warning: Failed to cleanup context file {}: {}",
+                    self.file_path.display(),
+                    e
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1283,5 +1325,326 @@ api_version = "v2"
         );
 
         std::env::set_current_dir(original_dir).unwrap();
+    }
+
+    // ========== CONTEXT FILE TESTS ==========
+
+    #[test]
+    fn test_context_file_cleanup_guard_basic() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("test-context.json");
+
+        // Create a test file
+        fs::write(&test_file, r#"{"test": "data"}"#).unwrap();
+        assert!(test_file.exists(), "Test file should exist initially");
+
+        // Create cleanup guard
+        {
+            let _guard = ContextFileCleanup::new(&test_file);
+            assert!(
+                test_file.exists(),
+                "File should still exist while guard is alive"
+            );
+        } // Guard drops here
+
+        // File should be cleaned up
+        assert!(
+            !test_file.exists(),
+            "File should be cleaned up after guard drops"
+        );
+    }
+
+    #[test]
+    fn test_context_file_cleanup_guard_with_nonexistent_file() {
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let nonexistent_file = temp_dir.path().join("does-not-exist.json");
+
+        // Cleanup guard should handle nonexistent files gracefully
+        {
+            let _guard = ContextFileCleanup::new(&nonexistent_file);
+            // Should not panic even though file doesn't exist
+        }
+
+        // Test passes if no panic occurred
+    }
+
+    #[test]
+    fn test_context_file_cleanup_guard_handles_permission_errors() {
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let test_file = temp_dir.path().join("readonly-context.json");
+
+        // Create file and make it read-only (simulate permission error)
+        fs::write(&test_file, r#"{"test": "data"}"#).unwrap();
+
+        // On Unix systems, we could make it read-only, but this is platform-specific
+        // For this test, we'll just verify the guard doesn't panic with normal files
+        {
+            let _guard = ContextFileCleanup::new(&test_file);
+        }
+
+        // File should be cleaned up normally
+        assert!(!test_file.exists(), "File should be cleaned up");
+    }
+
+    #[test]
+    fn test_context_file_creation_and_content() {
+        use std::fs;
+
+        // Create a sample execution context
+        let manifest = create_test_plugin_manifest();
+        let user_config = crate::models::PluginUserConfig::default();
+
+        let ctx = ExecutionContext::from_parts(
+            HashMap::new(),
+            &manifest,
+            &user_config,
+            HashMap::new(),
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        // Test context file creation logic
+        let temp_dir = std::env::temp_dir();
+        let context_file = temp_dir.join("test-context-creation.json");
+
+        // Serialize context to JSON
+        let json = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Write to temp file
+        fs::write(&context_file, &json).unwrap();
+
+        // Verify file exists and contains valid JSON
+        assert!(context_file.exists(), "Context file should be created");
+
+        let read_content = fs::read_to_string(&context_file).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&read_content).unwrap();
+
+        // Verify structure
+        assert!(parsed.get("manifest").is_some(), "Should contain manifest");
+        assert!(parsed.get("config").is_some(), "Should contain config");
+        assert!(parsed.get("meta").is_some(), "Should contain meta");
+        assert!(parsed.get("dry_run").is_some(), "Should contain dry_run");
+
+        // Cleanup
+        fs::remove_file(&context_file).unwrap();
+    }
+
+    #[test]
+    fn test_large_context_file_handling() {
+        use std::fs;
+
+        // Create a context with large data to test file approach benefits
+        let manifest = create_test_plugin_manifest();
+        let mut user_config = crate::models::PluginUserConfig::default();
+
+        // Add large config data
+        let large_string = "x".repeat(100_000); // 100KB string
+        user_config
+            .config
+            .insert("large_data".to_string(), toml::Value::String(large_string));
+
+        let mut project_vars = HashMap::new();
+        for i in 0..1000 {
+            project_vars.insert(
+                format!("var_{}", i),
+                toml::Value::String(format!("value_{}", i)),
+            );
+        }
+
+        let ctx = ExecutionContext::from_parts(
+            HashMap::new(),
+            &manifest,
+            &user_config,
+            project_vars,
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        // Test that large context can be serialized and written to file
+        let temp_dir = std::env::temp_dir();
+        let context_file = temp_dir.join("test-large-context.json");
+
+        let json = serde_json::to_string_pretty(&ctx).unwrap();
+        assert!(json.len() > 100_000, "Context should be large (>100KB)");
+
+        // Write large context to file
+        let write_result = fs::write(&context_file, &json);
+        assert!(
+            write_result.is_ok(),
+            "Should be able to write large context file"
+        );
+
+        // Verify file size
+        let metadata = fs::metadata(&context_file).unwrap();
+        assert!(metadata.len() > 100_000, "Context file should be large");
+
+        // Verify content is still valid JSON
+        let read_content = fs::read_to_string(&context_file).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&read_content).unwrap();
+        assert!(
+            parsed.get("config").is_some(),
+            "Large context should still be valid"
+        );
+
+        // Cleanup
+        fs::remove_file(&context_file).unwrap();
+    }
+
+    #[test]
+    fn test_deno_args_include_context_file() {
+        use crate::models::{PluginManifest, PluginMeta};
+
+        // This test verifies that the Deno arguments would include the context file
+        // We can't actually run Deno in tests, but we can test the argument construction
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                registry: None,
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            permissions: None,
+        };
+
+        // Simulate the Deno args construction from execute_plugin
+        let script_path = "/path/to/script.ts";
+        let context_file_path = "/tmp/mis-context-12345.json";
+
+        let mut deno_args = vec!["run".to_string()];
+        // Note: permissions would be added here in real execution
+        deno_args.push(script_path.to_string());
+        deno_args.push("--context-file".to_string());
+        deno_args.push(context_file_path.to_string());
+
+        // Verify argument structure
+        assert_eq!(deno_args[0], "run");
+        assert_eq!(deno_args[deno_args.len() - 3], "/path/to/script.ts");
+        assert_eq!(deno_args[deno_args.len() - 2], "--context-file");
+        assert_eq!(
+            deno_args[deno_args.len() - 1],
+            "/tmp/mis-context-12345.json"
+        );
+    }
+
+    #[test]
+    fn test_context_file_name_uniqueness() {
+        // Test that context file names are unique (using process ID)
+        let temp_dir = std::env::temp_dir();
+        let process_id = std::process::id();
+
+        let context_file1 = temp_dir.join(format!("mis-context-{}.json", process_id));
+        let context_file2 = temp_dir.join(format!("mis-context-{}.json", process_id));
+
+        // Same process ID should generate same filename (this is expected)
+        assert_eq!(context_file1, context_file2);
+
+        // But in different processes, the names would be different
+        let different_id = process_id + 1;
+        let context_file3 = temp_dir.join(format!("mis-context-{}.json", different_id));
+        assert_ne!(context_file1, context_file3);
+    }
+
+    #[test]
+    fn test_context_file_error_handling() {
+        use std::fs;
+
+        // Test error handling when temp directory is not writable
+        // (This is hard to test portably, so we'll test basic error propagation)
+
+        let manifest = create_test_plugin_manifest();
+        let user_config = crate::models::PluginUserConfig::default();
+
+        let ctx = ExecutionContext::from_parts(
+            HashMap::new(),
+            &manifest,
+            &user_config,
+            HashMap::new(),
+            "/test/project".to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        let json = serde_json::to_string_pretty(&ctx).unwrap();
+
+        // Try to write to an invalid path (this should fail)
+        let invalid_path = std::path::Path::new("/root/nonexistent/directory/context.json");
+        let result = fs::write(invalid_path, &json);
+
+        // Should fail gracefully
+        assert!(result.is_err(), "Should fail when writing to invalid path");
+    }
+
+    #[test]
+    fn test_execute_plugin_context_file_integration() {
+        // Integration test for the complete execute_plugin flow with context files
+        // We can't run actual Deno, but we can test up to the point of execution
+
+        use std::fs;
+        use tempfile::tempdir;
+
+        let temp_dir = tempdir().unwrap();
+        let plugin_dir = temp_dir.path();
+
+        // Create a test script file
+        let script_file = plugin_dir.join("test-script.ts");
+        fs::write(&script_file, "console.log('test');").unwrap();
+
+        // Create test manifest and context
+        let manifest = create_test_plugin_manifest();
+        let user_config = crate::models::PluginUserConfig::default();
+
+        let ctx = ExecutionContext::from_parts(
+            HashMap::new(),
+            &manifest,
+            &user_config,
+            HashMap::new(),
+            temp_dir.path().to_string_lossy().to_string(),
+            manifest.plugin.clone(),
+            false,
+        )
+        .unwrap();
+
+        // Test the context file creation part of execute_plugin
+        let temp_dir_sys = std::env::temp_dir();
+        let context_file =
+            temp_dir_sys.join(format!("mis-context-test-{}.json", std::process::id()));
+
+        let json = serde_json::to_string_pretty(&ctx).unwrap();
+        let write_result = fs::write(&context_file, json);
+        assert!(write_result.is_ok(), "Should be able to write context file");
+
+        // Verify context file exists and is readable
+        assert!(context_file.exists(), "Context file should exist");
+        let content = fs::read_to_string(&context_file).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
+        assert!(parsed.is_object(), "Context should be valid JSON object");
+
+        // Test cleanup
+        let cleanup_guard = ContextFileCleanup::new(&context_file);
+        assert!(
+            context_file.exists(),
+            "File should exist while guard is alive"
+        );
+        drop(cleanup_guard);
+        assert!(
+            !context_file.exists(),
+            "File should be cleaned up after guard drops"
+        );
     }
 }

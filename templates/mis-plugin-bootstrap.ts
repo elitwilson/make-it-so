@@ -7,7 +7,7 @@ import { mis } from "../../mis-plugin-api.ts";
 import * as cow from "https://deno.land/x/cowsay@1.1/mod.ts";
 
 // 👇 This is the entrypoint of your plugin script.
-// The Make It So CLI pipes JSON into stdin when it runs your plugin.
+// The Make It So CLI passes context via a temporary file when it runs your plugin.
 try {
   // Load context using the shared utility
   const ctx: PluginContext = await mis.loadContext();
