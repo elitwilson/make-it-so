@@ -192,12 +192,18 @@ const validationResult = await runPluginSafe("validate-semver", {
 });
 ```
 
-## Plugin Manifest (`plugin.toml`)
+## Plugin Structure
 
-Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes a
-`plugin.toml` file that describes what it does and how to run it.
+Each plugin lives inside `.makeitso/plugins/<your-plugin>/` and includes two
+configuration files:
 
-### Full Example
+- **`manifest.toml`** - Static plugin metadata and commands (managed by plugin
+  author)
+- **`config.toml`** - User-editable configuration variables
+
+### Plugin Manifest (`manifest.toml`)
+
+The manifest file defines the plugin's static configuration:
 
 ```toml
 [plugin]
@@ -217,12 +223,20 @@ script = "./bark-plugin.ts"   # <-- create a new .ts script for every command
 
 [deno_dependencies]           # <-- Shared dependencies available to all plugins
 cowsay = "https://deno.land/x/cowsay@1.1/mod.ts"
+```
 
+### Plugin Config (`config.toml`)
+
+The config file contains user-customizable variables:
+
+```toml
 [user_config]                 # <-- User-customizable config variables
 message = "Moo It So 🪄"      # <-- Accessible via 'ctx.config' in your .ts file
 ```
 
-### Plugin Fields
+### Manifest Fields
+
+#### Plugin Metadata
 
 | Field         | Type   | Description                            |
 | ------------- | ------ | -------------------------------------- |
@@ -230,7 +244,7 @@ message = "Moo It So 🪄"      # <-- Accessible via 'ctx.config' in your .ts fi
 | `version`     | string | Plugin version (e.g. `0.1.0`)          |
 | `description` | string | Description of what this plugin does   |
 
-### Commands
+#### Commands
 
 Define commands under `[commands.<command-name>]`:
 
@@ -239,9 +253,9 @@ Define commands under `[commands.<command-name>]`:
 | `description` | string | Description shown in help output |
 | `script`      | string | Path to the `.ts` script to run  |
 
-### Dependencies
+#### Dependencies
 
-List external Deno modules used by the plugin:
+List external Deno modules used by the plugin in the manifest file:
 
 ```toml
 [deno_dependencies]
@@ -254,10 +268,10 @@ These are available in your script:
 import { say } from "cowsay";
 ```
 
-### Plugin Config
+### Config Fields
 
-Under `[user_config]`, you can define any config your plugin script needs. It's
-available via `ctx.config` in TypeScript:
+In `config.toml`, under `[user_config]`, you can define any config your plugin
+script needs. It's available via `ctx.config` in TypeScript:
 
 ```ts
 // Access plugin config
