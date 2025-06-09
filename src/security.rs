@@ -132,6 +132,11 @@ impl PluginPermissions {
             return Err("Empty command not allowed".to_string());
         }
 
+        // Always allow "mis" command (needed for runPlugin API)
+        if command == "mis" {
+            return Ok(command.to_string());
+        }
+
         // Block commands with arguments (potential injection)
         if command.contains(' ') || command.contains('\t') {
             return Err(format!("Commands with arguments not allowed: {}", command));
@@ -177,10 +182,10 @@ impl PluginPermissions {
             file_write: vec![project_root.to_string_lossy().to_string()],
             // Allow environment access (needed for many plugins)
             env_access: true,
-            // No network access by default
+            // No network access by default (including localhost - must be explicit)
             network: vec![],
-            // No command execution by default
-            run_commands: vec![],
+            // Allow "mis" command by default (needed for runPlugin API)
+            run_commands: vec!["mis".to_string()],
         }
     }
 
@@ -591,7 +596,7 @@ mod tests {
         assert_eq!(permissions.file_write, vec!["/test/project"]);
         assert_eq!(permissions.env_access, true);
         assert_eq!(permissions.network, Vec::<String>::new());
-        assert_eq!(permissions.run_commands, Vec::<String>::new());
+        assert_eq!(permissions.run_commands, vec!["mis"]);
     }
 
     #[test]
@@ -605,7 +610,8 @@ mod tests {
             vec![
                 "--allow-read=/test/project,.makeitso",
                 "--allow-write=/test/project",
-                "--allow-env"
+                "--allow-env",
+                "--allow-run=mis"
             ]
         );
     }
@@ -631,7 +637,7 @@ mod tests {
 
         let args = permissions.to_deno_args();
 
-        assert!(args.contains(&"--allow-run=git,npm".to_string()));
+        assert!(args.contains(&"--allow-run=mis,git,npm".to_string()));
     }
 
     #[test]
@@ -706,7 +712,7 @@ mod tests {
         assert!(args.contains(&"--allow-read=/test/project,.makeitso,./vendor/certs".to_string()));
         assert!(args.contains(&"--allow-write=/test/project,./dist".to_string()));
         assert!(args.contains(&"--allow-net=api.example.com".to_string()));
-        assert!(args.contains(&"--allow-run=docker".to_string()));
+        assert!(args.contains(&"--allow-run=mis,docker".to_string()));
     }
 
     #[test]
@@ -887,7 +893,7 @@ mod tests {
 
         // Should not have any unexpected additions
         assert_eq!(permissions.network.len(), 1);
-        assert_eq!(permissions.run_commands.len(), 1);
+        assert_eq!(permissions.run_commands.len(), 2); // mis + git
     }
 
     #[test]
@@ -930,7 +936,7 @@ mod tests {
         assert_eq!(permissions.file_write, vec!["/test/project"]);
         assert_eq!(permissions.env_access, true);
         assert_eq!(permissions.network, Vec::<String>::new());
-        assert_eq!(permissions.run_commands, Vec::<String>::new());
+        assert_eq!(permissions.run_commands, vec!["mis"]);
     }
 
     #[test]
@@ -979,7 +985,15 @@ mod tests {
         assert!(net_arg.is_none(), "Broad network access should be blocked");
 
         let run_arg = args.iter().find(|arg| arg.starts_with("--allow-run="));
-        assert!(run_arg.is_none(), "Dangerous commands should be blocked");
+        if let Some(arg) = run_arg {
+            // Only mis should be allowed (rm should be blocked)
+            assert_eq!(
+                arg, "--allow-run=mis",
+                "Only mis should be allowed, dangerous commands should be blocked"
+            );
+        } else {
+            panic!("Should have at least mis command allowed");
+        }
     }
 
     // ========== NEW COMPREHENSIVE SECURITY TESTS ==========
@@ -1056,7 +1070,7 @@ script = "./test.ts"
         }
 
         // Should still have empty run_commands (started with safe defaults)
-        assert_eq!(permissions.run_commands, Vec::<String>::new());
+        assert_eq!(permissions.run_commands, vec!["mis"]);
     }
 
     #[test]
@@ -1204,8 +1218,8 @@ script = "./test.ts"
             permissions.allow_run(cmd);
         }
 
-        // All safe commands should be added
-        assert_eq!(permissions.run_commands.len(), safe_commands.len());
+        // All safe commands should be added (plus mis default)
+        assert_eq!(permissions.run_commands.len(), safe_commands.len() + 1);
 
         for cmd in safe_commands {
             assert!(
@@ -1322,9 +1336,10 @@ script = "./test.ts"
         permissions.allow_run("git");
         permissions.allow_run("git");
 
-        // Should only appear once
-        assert_eq!(permissions.run_commands.len(), 1);
-        assert_eq!(permissions.run_commands[0], "git");
+        // Should have mis (default) + git (no duplicates)
+        assert_eq!(permissions.run_commands.len(), 2);
+        assert!(permissions.run_commands.contains(&"mis".to_string()));
+        assert!(permissions.run_commands.contains(&"git".to_string()));
 
         // Add same safe path multiple times
         let initial_read_count = permissions.file_read.len();
@@ -1392,9 +1407,10 @@ script = "./test.ts"
         assert!(result.is_ok());
         let permissions = result.unwrap();
 
-        // Should have both git and docker (git from plugin + both from command)
+        // Should have mis (default) + git and docker
         // Deduplication should prevent git appearing twice
-        assert_eq!(permissions.run_commands.len(), 2);
+        assert_eq!(permissions.run_commands.len(), 3);
+        assert!(permissions.run_commands.contains(&"mis".to_string()));
         assert!(permissions.run_commands.contains(&"git".to_string()));
         assert!(permissions.run_commands.contains(&"docker".to_string()));
     }
@@ -1487,8 +1503,8 @@ script = "./test.ts"
         assert!(result.is_ok());
         let permissions = result.unwrap();
 
-        // Should still have plugin-level permissions
-        assert_eq!(permissions.run_commands, vec!["git"]);
+        // Should still have plugin-level permissions (mis default + git from plugin)
+        assert_eq!(permissions.run_commands, vec!["mis", "git"]);
     }
 
     #[test]
@@ -1714,5 +1730,29 @@ script = "./test.ts"
         // Should have explicit localhost access via network permissions
         assert!(permissions.network.contains(&"localhost:11434".to_string()));
         assert!(permissions.network.contains(&"api.github.com".to_string()));
+    }
+
+    #[test]
+    fn test_mis_command_always_allowed() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        // mis should be included by default
+        assert!(permissions.run_commands.contains(&"mis".to_string()));
+
+        // Adding mis again should not duplicate
+        permissions.allow_run("mis");
+        assert_eq!(permissions.run_commands.len(), 1);
+        assert_eq!(permissions.run_commands[0], "mis");
+
+        // Other commands should still be validated
+        permissions.allow_run("git"); // Safe command
+        permissions.allow_run("rm"); // Dangerous command (should be blocked)
+
+        // Should have mis + git (rm blocked)
+        assert_eq!(permissions.run_commands.len(), 2);
+        assert!(permissions.run_commands.contains(&"mis".to_string()));
+        assert!(permissions.run_commands.contains(&"git".to_string()));
+        assert!(!permissions.run_commands.contains(&"rm".to_string()));
     }
 }

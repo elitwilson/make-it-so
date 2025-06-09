@@ -34,7 +34,11 @@ config_file = { description = "Path to configuration file", arg_type = "string",
 
 # Deploy command needs additional permissions for git operations
 [commands.deploy.permissions]
-run_commands = ["git", "docker", "kubectl"] # Execute deployment tools
+run_commands = [
+  "git",
+  "docker",
+  "kubectl",
+] # Execute deployment tools (mis is included by default)
 network = [
   "hub.docker.com",
   "k8s.prod.company.com",
