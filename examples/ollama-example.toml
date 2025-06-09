@@ -1,0 +1,36 @@
+# Example: Plugin that calls Ollama (local AI service)
+# Demonstrates localhost access via explicit network permissions
+
+[plugin]
+name = "ollama-ai"
+version = "1.0.0"
+description = "AI assistant powered by local Ollama service"
+
+# Plugin-level permissions
+[permissions]
+file_read = ["./prompts", "./context"]
+file_write = ["./output", "./logs"]
+env_access = true
+network = ["huggingface.co", "localhost:11434"] # 🔑 Explicit localhost access
+
+[commands.chat]
+description = "Chat with local AI model via Ollama"
+script = "./chat.ts"
+
+[commands.chat.args.required]
+prompt = { description = "Message to send to AI", arg_type = "string" }
+
+[commands.chat.args.optional]
+model = { description = "AI model to use", arg_type = "string", default_value = "llama2" }
+temperature = { description = "Response creativity (0.0-1.0)", arg_type = "float", default_value = "0.7" }
+
+[commands.summarize]
+description = "Summarize files using local AI"
+script = "./summarize.ts"
+
+[commands.summarize.args.required]
+file_path = { description = "Path to file to summarize", arg_type = "string" }
+
+# Example usage:
+# mis run ollama-ai:chat --prompt="Explain quantum computing"
+# mis run ollama-ai:summarize --file_path="./README.md"

@@ -72,13 +72,16 @@ impl PluginPermissions {
             return Err(format!("Wildcard domains not allowed: {}", domain));
         }
 
-        // Block dangerous IPs that could grant broad access
-        let dangerous_ips = ["0.0.0.0", "::", "localhost", "127.0.0.1", "::1"];
+        // Block dangerous IPs that could grant broad access (except localhost if allowed)
+        let dangerous_ips = ["0.0.0.0", "::"];
         for dangerous in &dangerous_ips {
             if normalized_domain == *dangerous {
                 return Err(format!("Broad network access not allowed: {}", domain));
             }
         }
+
+        // Note: localhost is now allowed when explicitly declared in network permissions
+        // This maintains security through explicit opt-in while simplifying DX
 
         // Block cloud metadata services (comprehensive list)
         let metadata_hosts = [
@@ -939,7 +942,7 @@ mod tests {
 
         let dangerous_permissions = SecurityPermissions {
             file_read: vec!["../../../etc/passwd".to_string()], // Path traversal
-            network: vec!["localhost".to_string()],             // Localhost access
+            network: vec!["0.0.0.0".to_string()],               // Broad network access
             run_commands: vec!["rm".to_string()],               // Dangerous command
             ..Default::default()
         };
@@ -973,7 +976,7 @@ mod tests {
         );
 
         let net_arg = args.iter().find(|arg| arg.starts_with("--allow-net="));
-        assert!(net_arg.is_none(), "Localhost access should be blocked");
+        assert!(net_arg.is_none(), "Broad network access should be blocked");
 
         let run_arg = args.iter().find(|arg| arg.starts_with("--allow-run="));
         assert!(run_arg.is_none(), "Dangerous commands should be blocked");
@@ -1133,10 +1136,8 @@ script = "./test.ts"
         let project_root = PathBuf::from("/test/project");
         let mut permissions = PluginPermissions::safe_defaults(&project_root);
 
+        // These should still be blocked (dangerous)
         let dangerous_domains = vec![
-            "localhost",
-            "127.0.0.1",
-            "::1",
             "0.0.0.0",
             "::",
             "*.evil.com",      // Wildcard
@@ -1144,13 +1145,13 @@ script = "./test.ts"
             "192.168.1.1",     // Private network
             "10.0.0.1",        // Private network
             "172.16.0.1",      // Private network
-            "169.254.169.254", // AWS metadata - should be blocked but not by private IP logic
+            "169.254.169.254", // AWS metadata
             "100.100.100.200", // Alibaba Cloud metadata
         ];
 
         let initial_count = permissions.network.len();
 
-        for domain in dangerous_domains {
+        for domain in &dangerous_domains {
             permissions.allow_network(domain);
 
             assert_eq!(
@@ -1160,6 +1161,15 @@ script = "./test.ts"
                 domain
             );
         }
+
+        // These localhost variants should now be allowed
+        let localhost_domains = vec!["localhost", "127.0.0.1", "::1"];
+        for domain in localhost_domains {
+            permissions.allow_network(domain);
+        }
+
+        // Should have added the localhost variants
+        assert_eq!(permissions.network.len(), initial_count + 3);
     }
 
     #[test]
@@ -1622,10 +1632,8 @@ script = "./test.ts"
         let project_root = PathBuf::from("/test/project");
         let mut permissions = PluginPermissions::safe_defaults(&project_root);
 
-        let case_variations = vec![
-            "LOCALHOST",
-            "LocalHost",
-            "127.0.0.1",
+        // These should still be blocked
+        let blocked_domains = vec![
             "192.168.1.1",
             "METADATA.GOOGLE.INTERNAL",
             "Metadata.Azure.Com",
@@ -1633,15 +1641,78 @@ script = "./test.ts"
 
         let initial_count = permissions.network.len();
 
-        for domain in case_variations {
+        for domain in blocked_domains {
             permissions.allow_network(domain);
 
             assert_eq!(
                 permissions.network.len(),
                 initial_count,
-                "Case variation '{}' should be blocked",
+                "Dangerous domain '{}' should be blocked",
                 domain
             );
         }
+
+        // These localhost variants should now be allowed
+        let localhost_variants = vec!["LOCALHOST", "localhost:8080", "127.0.0.1"];
+        for domain in localhost_variants {
+            permissions.allow_network(domain);
+        }
+
+        // Should have added the localhost variants (note: LOCALHOST normalizes to localhost)
+        assert_eq!(permissions.network.len(), initial_count + 3);
+    }
+
+    #[test]
+    fn test_localhost_access_via_explicit_network_permissions() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        // Initially no network access (including localhost)
+        let initial_count = permissions.network.len();
+        assert_eq!(initial_count, 0);
+
+        // Add localhost entries explicitly - these should now be allowed
+        permissions.allow_network("localhost:11434"); // Ollama default port
+        permissions.allow_network("127.0.0.1:8080"); // Local dev server
+        permissions.allow_network("::1:3000"); // IPv6 localhost
+
+        // Should have been added (localhost now allowed when explicit)
+        assert_eq!(permissions.network.len(), 3);
+        assert!(permissions.network.contains(&"localhost:11434".to_string()));
+        assert!(permissions.network.contains(&"127.0.0.1:8080".to_string()));
+        assert!(permissions.network.contains(&"::1:3000".to_string()));
+    }
+
+    #[test]
+    fn test_localhost_via_manifest_permissions() {
+        use crate::models::{PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        let project_root = PathBuf::from("/test/project");
+
+        let plugin_permissions = SecurityPermissions {
+            network: vec!["localhost:11434".to_string(), "api.github.com".to_string()],
+            ..Default::default()
+        };
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "ollama-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                registry: None,
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            permissions: Some(plugin_permissions),
+        };
+
+        let result = build_plugin_permissions(&project_root, &manifest, "test-command");
+        assert!(result.is_ok());
+        let permissions = result.unwrap();
+
+        // Should have explicit localhost access via network permissions
+        assert!(permissions.network.contains(&"localhost:11434".to_string()));
+        assert!(permissions.network.contains(&"api.github.com".to_string()));
     }
 }

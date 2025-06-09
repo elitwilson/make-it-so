@@ -45,7 +45,7 @@ pub struct SecurityPermissions {
     #[serde(default)]
     pub env_access: Option<bool>,
 
-    /// Network domains/IPs that can be accessed
+    /// Network domains/IPs that can be accessed (including localhost if explicitly declared)
     #[serde(default)]
     pub network: Vec<String>,
 

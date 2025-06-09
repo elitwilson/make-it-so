@@ -21,28 +21,55 @@ import type { PluginContext, PluginResult } from "./mis-types.d.ts";
 async function loadContext<TConfig = Record<string, unknown>>(): Promise<
   PluginContext<TConfig>
 > {
-  // Find the context file argument
+  // First try temp file (CLI execution mode)
   const contextFileIndex = Deno.args.findIndex((arg) =>
     arg === "--context-file"
   );
 
-  if (contextFileIndex === -1 || !Deno.args[contextFileIndex + 1]) {
-    throw new Error(
-      "🛑 No context file provided. Expected --context-file <path> argument.\n" +
-        "→ This indicates a bug in the Make It So CLI. Please report this issue.",
-    );
+  if (contextFileIndex !== -1 && Deno.args[contextFileIndex + 1]) {
+    const contextFilePath = Deno.args[contextFileIndex + 1];
+    try {
+      const contextData = await Deno.readTextFile(contextFilePath);
+      return JSON.parse(contextData) as PluginContext<TConfig>;
+    } catch (error) {
+      throw new Error(
+        `Failed to read context file '${contextFilePath}': ${error}`,
+      );
+    }
   }
 
-  const contextFilePath = Deno.args[contextFileIndex + 1];
-
+  // Fallback to stdin (composition mode)
   try {
-    const contextData = await Deno.readTextFile(contextFilePath);
-    return JSON.parse(contextData) as PluginContext<TConfig>;
+    const stdinContent = await readStdinContent();
+    if (stdinContent.trim()) {
+      return JSON.parse(stdinContent) as PluginContext<TConfig>;
+    }
   } catch (error) {
-    throw new Error(
-      `Failed to read context file '${contextFilePath}': ${error}`,
-    );
+    // stdin parsing failed, continue to error
   }
+
+  throw new Error(
+    "🛑 No context provided. Expected either --context-file <path> argument or context via stdin.\n" +
+      "→ This indicates a bug in the Make It So CLI or plugin composition. Please report this issue.",
+  );
+}
+
+async function readStdinContent(): Promise<string> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of Deno.stdin.readable) {
+    chunks.push(chunk);
+  }
+
+  // Calculate total length and concatenate chunks
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return new TextDecoder().decode(combined);
 }
 
 /**
@@ -298,71 +325,35 @@ async function composePluginsWithContext(
       console.error(`🔍 Step ${i + 1}/${steps.length}: ${step.plugin}`);
     }
 
-    // Resolve plugin path using configurable resolver
-    const pluginPath = resolver(step.plugin, context.project_root);
+    // Extract plugin arguments from enriched context for runPlugin
+    const pluginArgs = enrichedContext.plugin_args || {};
 
-    // Run the plugin with the enriched context
-    const proc = new Deno.Command("deno", {
-      args: ["run", "--allow-run", "--allow-env", pluginPath],
-      stdin: "piped",
-      stdout: "piped",
-      stderr: "piped",
-      cwd: context.project_root, // Always use context.project_root - no ambiguity
+    // Use runPlugin to delegate to Rust CLI (proper permission handling)
+    const result = await runPlugin(
+      step.plugin,
+      pluginArgs,
+      { debug: options.debug },
+    );
+
+    // Transform result if needed
+    const finalResult = step.transform ? step.transform(result) : result;
+
+    // Accumulate the result in the context
+    enrichedContext.results!.push({
+      plugin: step.plugin,
+      success: finalResult.success,
+      data: finalResult.success ? finalResult.data : undefined,
+      error: finalResult.success ? undefined : finalResult.error,
+      timestamp: new Date().toISOString(),
     });
 
-    const child = proc.spawn();
-
-    // Send enriched context to plugin via stdin
-    const writer = child.stdin.getWriter();
-    await writer.write(
-      new TextEncoder().encode(JSON.stringify(enrichedContext)),
-    );
-    await writer.close();
-
-    const { code, stdout, stderr } = await child.output();
-
-    if (code !== 0) {
-      const errorOutput = new TextDecoder().decode(stderr);
-      throw new Error(`Plugin '${step.plugin}' failed: ${errorOutput}`);
-    }
-
-    const output = new TextDecoder().decode(stdout);
-
-    if (options.debug || Deno.env.get("MIS_DEBUG") === "true") {
-      console.error(`🔍 Plugin output: ${output}`);
-      console.error(`🔍 Plugin stderr: ${new TextDecoder().decode(stderr)}`);
-    }
-
-    // Parse the plugin result using robust JSON extraction
-    try {
-      const result = extractFinalJson(output) as PluginResult;
-
-      // Transform result if needed
-      const finalResult = step.transform ? step.transform(result) : result;
-
-      // Accumulate the result in the context
-      enrichedContext.results!.push({
-        plugin: step.plugin,
-        success: finalResult.success,
-        data: finalResult.success ? finalResult.data : undefined,
-        error: finalResult.success ? undefined : finalResult.error,
-        timestamp: new Date().toISOString(),
-      });
-
-      // If this plugin updated the context, merge those changes
-      if (finalResult.success && finalResult.context) {
-        enrichedContext = {
-          ...enrichedContext,
-          ...finalResult.context,
-          results: enrichedContext.results, // Keep our accumulated results
-        };
-      }
-    } catch (err) {
-      throw new Error(
-        `Plugin '${step.plugin}' returned invalid JSON: ${
-          err instanceof Error ? err.message : String(err)
-        }\n\nFull output:\n${output}`,
-      );
+    // If this plugin updated the context, merge those changes
+    if (finalResult.success && finalResult.context) {
+      enrichedContext = {
+        ...enrichedContext,
+        ...finalResult.context,
+        results: enrichedContext.results, // Keep our accumulated results
+      };
     }
   }
 
@@ -426,10 +417,12 @@ function extractFinalJson(output: string): unknown {
 
 /**
  * Output a successful plugin result and exit.
- * Makes plugin development braindead simple - no JSON boilerplate needed!
  */
-function outputSuccess<TConfig = Record<string, unknown>>(
-  data: Record<string, unknown>,
+function outputSuccess<
+  TData = Record<string, unknown>,
+  TConfig = Record<string, unknown>,
+>(
+  data: TData,
   context?: PluginContext<TConfig>,
 ): never {
   console.log(JSON.stringify(
@@ -446,7 +439,6 @@ function outputSuccess<TConfig = Record<string, unknown>>(
 
 /**
  * Output an error plugin result and exit.
- * Makes error handling braindead simple - no JSON boilerplate needed!
  */
 function outputError<TConfig = Record<string, unknown>>(
   error: string,

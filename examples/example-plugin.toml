@@ -92,3 +92,21 @@ zod = "https://deno.land/x/zod@v3.22.4/mod.ts"
 # [api_endpoints]
 # monitoring = "https://monitoring.company.com"
 # deployment = "https://deploy.company.com"
+
+# Command with localhost access for AI/ML workflows
+[commands.ai-generate]
+description = "Generate content using local AI services"
+script = "./ai-generate.ts"
+
+[commands.ai-generate.args.required]
+prompt = { description = "Text prompt for AI generation", arg_type = "string" }
+
+[commands.ai-generate.args.optional]
+model = { description = "AI model to use", arg_type = "string", default_value = "llama2" }
+
+# AI command needs localhost access for Ollama/local AI services
+[commands.ai-generate.permissions]
+network = [
+  "localhost:11434",
+  "huggingface.co",
+] # Ollama default port + HuggingFace
