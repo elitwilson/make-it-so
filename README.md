@@ -304,6 +304,58 @@ console.log("project vars:", ctx.project_variables);
 | Full Documentation            | Docs for CLI usage, Typescript plugin API, etc... to come                                          | 🚧 WIP |
 
 ---
+## VS Code Setup
+
+ To ensure proper editor support without interfering with your main project’s config, VS Code should be set up as a multi-root workspace.
+
+1. Create a workspace file
+At the root of your project, create `project.code-workspace`:
+```json
+{
+  "folders": [
+    {
+      "name": "Main Project",
+      "path": "."
+    },
+    {
+      "name": "Make It So Plugins",
+      "path": "./.makeitso"
+    }
+  ],
+  "extensions": {
+    "recommendations": [
+      "denoland.vscode-deno"
+    ]
+  }
+}
+```
+
+2. Add `.vscode/settings.json` inside `.makeitso/`
+
+```json
+{
+  "deno.enable": true,
+  "deno.unstable": true,
+  "deno.lint": true,
+  "deno.suggest.imports.hosts": {
+    "https://deno.land": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "denoland.vscode-deno"
+  },
+  "deno.importMap": "./import_map.json"
+}
+```
+
+3. Leave the root `.vscode/settings.json` Deno-free
+  This keeps Deno tooling scoped only to `.makeitso` and avoids conflicts with your main project setup.
+
+4. Open the workspace in VS Code
+Use the workspace file to launch VS Code:
+`code project.code-workspace`
+
+#### You’ll now have full Deno support inside .makeitso without affecting the rest of your project.
+---
 
 ## ✨ That's It
 
