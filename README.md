@@ -347,7 +347,7 @@ At the root of your project, create `project.code-workspace`:
 }
 ```
 
-3. Leave the root `.vscode/settings.json` Deno-free
+3. Leave the root `.vscode/settings.json` Deno-free  
   This keeps Deno tooling scoped only to `.makeitso` and avoids conflicts with your main project setup.
 
 4. Open the workspace in VS Code
