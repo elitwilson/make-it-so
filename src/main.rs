@@ -29,7 +29,11 @@ use commands::{
 };
 
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    // Transform args to support implicit run (e.g., "mis plugin:cmd" → "mis run plugin:cmd")
+    let args: Vec<String> = std::env::args().collect();
+    let transformed_args = cli::transform_args_for_implicit_run(&args);
+
+    let cli = Cli::parse_from(transformed_args);
 
     match cli.command {
         Commands::Init { name } => {

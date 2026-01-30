@@ -78,6 +78,42 @@ pub fn prompt_user(message: &str) -> anyhow::Result<bool> {
     Ok(matches!(input.as_str(), "y" | "yes"))
 }
 
+/// Check if we should inject "run" command for implicit plugin execution
+/// Returns true if the first argument looks like a plugin:command and isn't already "run"
+pub fn should_inject_run_command(args: &[String]) -> bool {
+    if args.len() < 2 {
+        return false;
+    }
+
+    let first_arg = &args[1];
+
+    // Don't inject if it's a flag
+    if first_arg.starts_with("--") || first_arg.starts_with('-') {
+        return false;
+    }
+
+    // Don't inject if it's already an explicit subcommand
+    let known_subcommands = ["init", "run", "create", "add", "update", "info"];
+    if known_subcommands.contains(&first_arg.as_str()) {
+        return false;
+    }
+
+    // Inject if it looks like a plugin:command
+    first_arg.contains(':')
+}
+
+/// Transform args to inject "run" command if needed
+/// Example: ["mis", "claude:init", "--flag"] → ["mis", "run", "claude:init", "--flag"]
+pub fn transform_args_for_implicit_run(args: &[String]) -> Vec<String> {
+    if should_inject_run_command(args) {
+        let mut new_args = vec![args[0].clone(), "run".to_string()];
+        new_args.extend_from_slice(&args[1..]);
+        new_args
+    } else {
+        args.to_vec()
+    }
+}
+
 pub fn parse_cli_args(args: &[String]) -> HashMap<String, String> {
     let mut parsed_args = HashMap::new();
     let mut iter = args.iter().peekable();
@@ -274,5 +310,62 @@ mod tests {
         assert_eq!(result.get("count"), Some(&"42".to_string()));
         assert_eq!(result.get("price"), Some(&"19.99".to_string()));
         assert_eq!(result.get("negative"), Some(&"-5".to_string()));
+    }
+
+    // Tests for implicit run command feature
+    #[test]
+    fn test_should_inject_run_for_plugin_command() {
+        // Should inject "run" for plugin:command syntax
+        assert!(should_inject_run_command(&["mis".to_string(), "claude:init".to_string()]));
+        assert!(should_inject_run_command(&["mis".to_string(), "git-utils:status".to_string()]));
+    }
+
+    #[test]
+    fn test_should_not_inject_run_for_explicit_subcommands() {
+        // Should NOT inject for explicit subcommands
+        assert!(!should_inject_run_command(&["mis".to_string(), "init".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "create".to_string(), "foo".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "add".to_string(), "plugin".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "run".to_string(), "plugin:cmd".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "info".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "update".to_string()]));
+    }
+
+    #[test]
+    fn test_should_not_inject_run_for_flags() {
+        // Should NOT inject for flags
+        assert!(!should_inject_run_command(&["mis".to_string(), "--help".to_string()]));
+        assert!(!should_inject_run_command(&["mis".to_string(), "--version".to_string()]));
+    }
+
+    #[test]
+    fn test_transform_args_injects_run() {
+        let args = vec!["mis".to_string(), "claude:init".to_string(), "--dry-run".to_string()];
+        let result = transform_args_for_implicit_run(&args);
+
+        assert_eq!(result, vec![
+            "mis".to_string(),
+            "run".to_string(),
+            "claude:init".to_string(),
+            "--dry-run".to_string()
+        ]);
+    }
+
+    #[test]
+    fn test_transform_args_preserves_explicit_run() {
+        let args = vec!["mis".to_string(), "run".to_string(), "claude:init".to_string()];
+        let result = transform_args_for_implicit_run(&args);
+
+        // Should be unchanged
+        assert_eq!(result, args);
+    }
+
+    #[test]
+    fn test_transform_args_preserves_other_subcommands() {
+        let args = vec!["mis".to_string(), "init".to_string()];
+        let result = transform_args_for_implicit_run(&args);
+
+        // Should be unchanged
+        assert_eq!(result, args);
     }
 }
