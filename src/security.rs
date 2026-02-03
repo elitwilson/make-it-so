@@ -57,6 +57,65 @@ impl PluginPermissions {
         Ok(path.to_string())
     }
 
+    /// Expand $VAR and ${VAR} environment variables in a path string.
+    /// Unset variables are left unexpanded so validation can still see them.
+    fn expand_env_vars(path: &str) -> String {
+        let mut result = String::new();
+        let mut chars = path.chars().peekable();
+
+        while let Some(c) = chars.next() {
+            if c == '$' {
+                if chars.peek() == Some(&'{') {
+                    // ${VAR} syntax
+                    chars.next(); // consume '{'
+                    let mut var_name = String::new();
+                    while let Some(&nc) = chars.peek() {
+                        if nc == '}' {
+                            chars.next();
+                            break;
+                        }
+                        var_name.push(nc);
+                        chars.next();
+                    }
+                    match std::env::var(&var_name) {
+                        Ok(val) => result.push_str(&val),
+                        Err(_) => {
+                            result.push_str("${");
+                            result.push_str(&var_name);
+                            result.push('}');
+                        }
+                    }
+                } else {
+                    // $VAR syntax — consume alphanumeric and underscore
+                    let mut var_name = String::new();
+                    while let Some(&nc) = chars.peek() {
+                        if nc.is_alphanumeric() || nc == '_' {
+                            var_name.push(nc);
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if var_name.is_empty() {
+                        result.push('$');
+                    } else {
+                        match std::env::var(&var_name) {
+                            Ok(val) => result.push_str(&val),
+                            Err(_) => {
+                                result.push('$');
+                                result.push_str(&var_name);
+                            }
+                        }
+                    }
+                }
+            } else {
+                result.push(c);
+            }
+        }
+
+        result
+    }
+
     /// Validate network domain/IP to prevent wildcards and dangerous access
     fn validate_network_domain(domain: &str) -> Result<String, String> {
         // Normalize input: trim whitespace and convert to lowercase
@@ -223,7 +282,7 @@ impl PluginPermissions {
 
     /// Add additional file read permissions with security validation
     pub fn allow_read<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        let path_str = path.as_ref().to_string_lossy().to_string();
+        let path_str = Self::expand_env_vars(&path.as_ref().to_string_lossy());
         match Self::validate_file_path(&path_str) {
             Ok(validated_path) => {
                 // Avoid duplicates
@@ -242,7 +301,7 @@ impl PluginPermissions {
 
     /// Add additional file write permissions with security validation
     pub fn allow_write<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
-        let path_str = path.as_ref().to_string_lossy().to_string();
+        let path_str = Self::expand_env_vars(&path.as_ref().to_string_lossy());
         match Self::validate_file_path(&path_str) {
             Ok(validated_path) => {
                 // Avoid duplicates
@@ -1754,5 +1813,103 @@ script = "./test.ts"
         assert!(permissions.run_commands.contains(&"mis".to_string()));
         assert!(permissions.run_commands.contains(&"git".to_string()));
         assert!(!permissions.run_commands.contains(&"rm".to_string()));
+    }
+
+    // ========== ENV VAR EXPANSION TESTS ==========
+    // These tests use unsafe set_var/remove_var, which is required in edition 2024.
+    // set_var is unsound if another thread concurrently calls env::var, but test binaries
+    // own their env and these vars (MIS_TEST_*) are unique per test, so it's safe here.
+
+    #[test]
+    fn test_dollar_syntax_expansion() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        unsafe { std::env::set_var("MIS_TEST_DOLLAR", "/test/expanded"); }
+        permissions.allow_read("$MIS_TEST_DOLLAR/data");
+        unsafe { std::env::remove_var("MIS_TEST_DOLLAR"); }
+
+        assert!(
+            permissions.file_read.contains(&"/test/expanded/data".to_string()),
+            "$VAR syntax should be expanded. Got: {:?}",
+            permissions.file_read
+        );
+    }
+
+    #[test]
+    fn test_braces_syntax_expansion() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        unsafe { std::env::set_var("MIS_TEST_BRACES", "/test/expanded"); }
+        permissions.allow_write("${MIS_TEST_BRACES}/output");
+        unsafe { std::env::remove_var("MIS_TEST_BRACES"); }
+
+        assert!(
+            permissions.file_write.contains(&"/test/expanded/output".to_string()),
+            "${{VAR}} syntax should be expanded. Got: {:?}",
+            permissions.file_write
+        );
+    }
+
+    #[test]
+    fn test_unset_var_left_unexpanded() {
+        let project_root = PathBuf::from("/test/project");
+        let mut permissions = PluginPermissions::safe_defaults(&project_root);
+
+        unsafe { std::env::remove_var("MIS_UNSET_VAR_XYZ"); }
+        permissions.allow_read("$MIS_UNSET_VAR_XYZ/data");
+
+        assert!(
+            permissions.file_read.contains(&"$MIS_UNSET_VAR_XYZ/data".to_string()),
+            "Unset vars should be left as literal. Got: {:?}",
+            permissions.file_read
+        );
+    }
+
+    #[test]
+    fn test_expansion_flows_to_deno_args() {
+        use crate::models::{PluginManifest, PluginMeta, SecurityPermissions};
+        use std::collections::HashMap;
+
+        unsafe { std::env::set_var("MIS_TEST_E2E", "/test/e2e-expanded"); }
+
+        let project_root = PathBuf::from("/test/project");
+        let plugin_permissions = SecurityPermissions {
+            file_read: vec!["$MIS_TEST_E2E/config".to_string()],
+            file_write: vec!["${MIS_TEST_E2E}/output".to_string()],
+            ..Default::default()
+        };
+
+        let manifest = PluginManifest {
+            plugin: PluginMeta {
+                name: "test-plugin".to_string(),
+                description: None,
+                version: "1.0.0".to_string(),
+                registry: None,
+            },
+            commands: HashMap::new(),
+            deno_dependencies: HashMap::new(),
+            permissions: Some(plugin_permissions),
+        };
+
+        let permissions = build_plugin_permissions(&project_root, &manifest, "any").unwrap();
+        let args = permissions.to_deno_args();
+
+        unsafe { std::env::remove_var("MIS_TEST_E2E"); }
+
+        let read_arg = args.iter().find(|a| a.starts_with("--allow-read=")).unwrap();
+        let write_arg = args.iter().find(|a| a.starts_with("--allow-write=")).unwrap();
+
+        assert!(
+            read_arg.contains("/test/e2e-expanded/config"),
+            "--allow-read should contain expanded path. Got: {}",
+            read_arg
+        );
+        assert!(
+            write_arg.contains("/test/e2e-expanded/output"),
+            "--allow-write should contain expanded path. Got: {}",
+            write_arg
+        );
     }
 }
