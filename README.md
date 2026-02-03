@@ -347,7 +347,7 @@ At the root of your project, create `project.code-workspace`:
 }
 ```
 
-3. Leave the root `.vscode/settings.json` Deno-free  
+3. Leave the root `.vscode/settings.json` Deno-free
   This keeps Deno tooling scoped only to `.makeitso` and avoids conflicts with your main project setup.
 
 4. Open the workspace in VS Code
@@ -357,7 +357,7 @@ Use the workspace file to launch VS Code:
 #### You’ll now have full Deno support inside .makeitso without affecting the rest of your project.
 ---
 
-## ✨ That's It
+## ✨ That's It!
 
 Build your own CLI commands for your project, powered by Deno + TypeScript, all
 wrapped in a slick developer workflow with full TypeScript support and plugin
